@@ -256,24 +256,24 @@ SwitchToken    key_names[] =
     SW_NAME2(INP_LEFT,"LEFTARROW")
     SW_NAME2(INP_RIGHT,"RIGHTARROW")
 
-    SW_NAME(INP_JOY1)    
-    SW_NAME(INP_JOY2)
-    SW_NAME(INP_JOY3)
-    SW_NAME(INP_JOY4)
-    SW_NAME(INP_JOY5)
-    SW_NAME(INP_JOY6)
-    SW_NAME(INP_JOY7)
-    SW_NAME(INP_JOY8)
-    SW_NAME(INP_JOY9)
-    SW_NAME(INP_JOY10)
+    SW_NAME2(INP_JOY1, "PAD_A")    
+    SW_NAME2(INP_JOY2, "PAD_B")
+    SW_NAME2(INP_JOY3, "PAD_X")
+    SW_NAME2(INP_JOY4, "PAD_Y")
+    SW_NAME2(INP_JOY5, "PAD_LB")
+    SW_NAME2(INP_JOY6, "PAD_RB")
+    SW_NAME2(INP_JOY7, "PAD_BACK")
+    SW_NAME2(INP_JOY8, "PAD_START")
+    SW_NAME2(INP_JOY9, "PAD_L3")
+    SW_NAME2(INP_JOY10, "PAD_R3")
 
-    SW_NAME(INP_JOY11)
-    SW_NAME(INP_JOY12)
-    SW_NAME(INP_JOY13)
-    SW_NAME(INP_JOY14)
-    SW_NAME(INP_JOY15)
-    SW_NAME(INP_JOY16)
-    SW_NAME(INP_JOY17)
+    SW_NAME2(INP_JOY11, "PAD_GUIDE")
+    SW_NAME2(INP_JOY12, "PAD_SHARE")
+    SW_NAME2(INP_JOY13, "PAD_P1")
+    SW_NAME2(INP_JOY14, "PAD_P2")
+    SW_NAME2(INP_JOY15, "PAD_P3")
+    SW_NAME2(INP_JOY16, "PAD_P4")
+    SW_NAME2(INP_JOY17, "PAD_TOUCHPAD")
     SW_NAME(INP_JOY18)
     SW_NAME(INP_JOY19)
     SW_NAME(INP_JOY20)
@@ -283,10 +283,10 @@ SwitchToken    key_names[] =
     SW_NAME(INP_JOY24)
     SW_NAME(INP_JOY25)
 
-    SW_NAME(INP_JOYPAD_UP)
-    SW_NAME(INP_JOYPAD_DOWN)
-    SW_NAME(INP_JOYPAD_LEFT)
-    SW_NAME(INP_JOYPAD_RIGHT)
+    SW_NAME2(INP_JOYPAD_UP, "DPAD_UP")
+    SW_NAME2(INP_JOYPAD_DOWN, "DPAD_DOWN")
+    SW_NAME2(INP_JOYPAD_LEFT, "DPAD_LEFT")
+    SW_NAME2(INP_JOYPAD_RIGHT, "DPAD_RIGHT")
 
     SW_NAME(INP_POV1_UP)
     SW_NAME(INP_POV1_DOWN)
@@ -304,15 +304,15 @@ SwitchToken    key_names[] =
     SW_NAME(INP_POV3_RIGHT)
 
 
-    SW_NAME(INP_JOYSTICK1_UP)
-    SW_NAME(INP_JOYSTICK1_DOWN)
-    SW_NAME(INP_JOYSTICK1_LEFT)
-    SW_NAME(INP_JOYSTICK1_RIGHT)
+    SW_NAME2(INP_JOYSTICK1_UP, "LS_UP")
+    SW_NAME2(INP_JOYSTICK1_DOWN, "LS_DOWN")
+    SW_NAME2(INP_JOYSTICK1_LEFT, "LS_LEFT")
+    SW_NAME2(INP_JOYSTICK1_RIGHT, "LS_RIGHT")
 
-    SW_NAME(INP_JOYSTICK2_UP)
-    SW_NAME(INP_JOYSTICK2_DOWN)
-    SW_NAME(INP_JOYSTICK2_LEFT)
-    SW_NAME(INP_JOYSTICK2_RIGHT)
+    SW_NAME2(INP_JOYSTICK2_UP, "RS_UP")
+    SW_NAME2(INP_JOYSTICK2_DOWN, "RS_DOWN")
+    SW_NAME2(INP_JOYSTICK2_LEFT, "RS_LEFT")
+    SW_NAME2(INP_JOYSTICK2_RIGHT, "RS_RIGHT")
 
     SW_NAME(INP_JOYSTICK3_UP)
     SW_NAME(INP_JOYSTICK3_DOWN)
@@ -425,6 +425,139 @@ static int keybind_idFromModifier( int id )
         return INP_ALT;
     else
         return 0;
+}
+
+/* Gamepad modifiers of the current pad key event. */
+static int pad_modifier_mask;
+/* Gamepad modifiers held right now. */
+static int pad_held_mask;
+
+/* Bind names of the gamepad modifier bits, in bit order. */
+static const struct {
+	int bit;
+	const char *name;
+} pad_modifier_names[] = {
+	{ KEYBIND_PADMOD_LT, "LT" },
+	{ KEYBIND_PADMOD_RT, "RT" },
+	{ KEYBIND_PADMOD_LB, "LB" },
+	{ KEYBIND_PADMOD_RB, "RB" },
+};
+
+int keybind_padModifier(int mask)
+{
+	mask &= KEYBIND_PADMOD_ALL;
+	return mask ? MODIFIER_PAD_FIRST + mask - 1 : MODIFIER_NONE;
+}
+
+int keybind_padMask(int mod)
+{
+	if (mod < MODIFIER_PAD_FIRST || mod >= MOD_TOTAL)
+		return 0;
+	return mod - MODIFIER_PAD_FIRST + 1;
+}
+
+void keybind_modifierPrefix(int mod, char *out, size_t outSize)
+{
+	int mask = keybind_padMask(mod);
+	int i;
+
+	out[0] = '\0';
+	if (mod == MODIFIER_CTRL)
+		strcpy_s(out, outSize, "CTRL+");
+	else if (mod == MODIFIER_SHIFT)
+		strcpy_s(out, outSize, "SHIFT+");
+	else if (mod == MODIFIER_ALT)
+		strcpy_s(out, outSize, "ALT+");
+
+	for (i = 0; i < ARRAY_SIZE(pad_modifier_names); i++) {
+		if (mask & pad_modifier_names[i].bit) {
+			strcat_s(out, outSize, pad_modifier_names[i].name);
+			strcat_s(out, outSize, "+");
+		}
+	}
+}
+
+void keybind_setPadModifiers(int mask)
+{
+	pad_modifier_mask = mask & KEYBIND_PADMOD_ALL;
+}
+
+void keybind_setPadModifiersHeld(int mask)
+{
+	pad_held_mask = mask & KEYBIND_PADMOD_ALL;
+}
+
+/* Gamepad modifier bit of a bind name such as "LT", or 0. */
+static int keybind_padModifierBit(const char *name)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(pad_modifier_names); i++) {
+		if (name && !stricmp(name, pad_modifier_names[i].name))
+			return pad_modifier_names[i].bit;
+	}
+	return 0;
+}
+
+/* True while the modifier of bind slot @mod is still held. */
+static int keybind_modifierHeld(int mod)
+{
+	int mask = keybind_padMask(mod);
+
+	if (mask)
+		return (pad_held_mask & mask) == mask;
+	return inpLevel(keybind_idFromModifier(mod));
+}
+
+/*
+ * Split a bind name such as "SHIFT+A", "A" or "LT+RB+PAD_A" into its key
+ * code and modifier number. Only gamepad modifiers may be combined; any
+ * other name before the key is read as one keyboard modifier, as before.
+ * Sets *keyvalue to 0 if the key is unknown.
+ */
+static void keybind_parseName(const char *name, int *keyvalue, int *modvalue)
+{
+	char tmp[BIND_MAX];
+	char *tokens[8];
+	char *context = NULL;
+	char *token;
+	int count = 0;
+	int mask = 0;
+	int i;
+
+	strncpyt(tmp, name, BIND_MAX);
+	for (token = strtok_s(tmp, "+", &context);
+	     token && count < ARRAY_SIZE(tokens);
+	     token = strtok_s(NULL, "+", &context))
+		tokens[count++] = token;
+
+	*keyvalue = 0;
+	*modvalue = MODIFIER_NONE;
+	if (!count)
+		return;
+
+	for (i = 0; i < count - 1; i++) {
+		int bit = keybind_padModifierBit(tokens[i]);
+
+		if (!bit)
+			break;
+		mask |= bit;
+	}
+	if (count > 1 && i == count - 1) {
+		*keyvalue = keyValue(tokens[count - 1]);
+		*modvalue = keybind_padModifier(mask);
+		return;
+	}
+
+	/* Keyboard form: "MOD+KEY" or "KEY", MOD being Ctrl, Shift or Alt. */
+	*keyvalue = count > 1 ? keyValue(tokens[1]) : 0;
+	*modvalue = keyValue(tokens[0]);
+	if (!*keyvalue) {
+		/* If there is no key, the modifier name is the key. */
+		*keyvalue = *modvalue;
+		*modvalue = 0;
+	}
+	*modvalue = keybind_modifier(*modvalue);
 }
 
 
@@ -555,28 +688,10 @@ void keybind_setkey( KeyBindProfile *kbp, const char *key, const char *command, 
 {
     int keyvalue, modvalue;
     int keyvaluealt = 0;
-    char *keyname, *modname;
-    char tmp[BIND_MAX];
 
-    // temporary holder for the key string
-    strncpyt( tmp, key, BIND_MAX );
+    keybind_parseName( key, &keyvalue, &modvalue );
 
-    // get tokens
-    modname = strtok( tmp, "+" );
-    keyname = strtok( NULL, "+" );
 
-    // get the value
-    modvalue = keyValue( modname );
-    keyvalue = keyValue( keyname );
-    
-    if (!keyvalue)
-    {
-        //    if there is no key, the modkey is the key 
-        keyvalue = modvalue;
-        modvalue = 0;
-    }
-
-    modvalue = keybind_modifier(modvalue);
     
     //    make sure we don't assign the key to an out of bounds key
     switch (keyvalue)
@@ -603,30 +718,10 @@ void keybind_setkey( KeyBindProfile *kbp, const char *key, const char *command, 
 void displayKeybind(const char *key)
 {
     KeyBindProfile *curProfile = eaGet( &kbProfiles, eaSize(&kbProfiles)-1 );
-    char tmp[BIND_MAX];
-    char *modname;
-    char *keyname;
     int keyvalue, modvalue;
-    
 
-    // temporary holder for the key string
-    strncpyt( tmp, key, BIND_MAX );
+    keybind_parseName(key, &keyvalue, &modvalue);
 
-    // get tokens
-    modname = strtok( tmp, "+" );
-    keyname = strtok( NULL, "+" );
-
-    // get the value
-    keyvalue = keyValue( keyname );
-    modvalue = keyValue( modname );
-
-    if( !keyvalue )
-    {
-        keyvalue = modvalue;
-        modvalue = 0;
-    }
-
-    modvalue = keybind_modifier( modvalue );
 
     if (keyvalue > 0 && keyvalue < BIND_MAX)
     {
@@ -795,6 +890,15 @@ int keybind_executeCommand( KeyBind * kb, int mod, int state, int timeStamp, int
 int keybind_findCommand( KeyBindProfile *curProfile, int keyScanCode, int state, int timeStamp, int x, int y )
 {
     int i, mod, retVal = 0;
+
+    // A pad key pressed with pad modifiers held runs only that mix's bind.
+    // Holding a trigger picks a layer, so a mix with no bind does nothing
+    // rather than falling back to the button's plain bind.
+    if (pad_modifier_mask)
+	    return keybind_executeCommand(
+		    &curProfile->binds[keyScanCode],
+		    keybind_padModifier(pad_modifier_mask), state, timeStamp, x,
+		    y);
 
     // try modifier versions if necessary
     if( inpLevel( INP_CONTROL ) )
@@ -1052,7 +1156,7 @@ static void bindCheckKeysReleasedSub(KeyBind *key_binds)
 
         for( j = 1; j < MOD_TOTAL; j++ )
         {
-            if (key_binds[i].pressed[j] && (!inpLevel(i) || !inpLevel( keybind_idFromModifier(j)) ) )
+            if (key_binds[i].pressed[j] && (!inpLevel(i) || !keybind_modifierHeld(j) ) )
             {
                 key_binds[i].pressed[j] = 0;
                 if( key_binds[i].command[j] )
@@ -1109,11 +1213,10 @@ void bindListBinds(void)
                     {
                         if(curProfile->binds[k].command[m]){
                             char buffer[1000];
-                            sprintf(buffer, "%s%s", 
-                                    m == MODIFIER_CTRL ? "CTRL+" :
-                                        m == MODIFIER_SHIFT ? "SHIFT+" :
-                                            m == MODIFIER_ALT ? "ALT+" :
-                                                "",
+                            char prefix[32];
+
+                            keybind_modifierPrefix(m, prefix, sizeof(prefix));
+                            sprintf(buffer, "%s%s", prefix,
                                     key_names[j].name2 ? key_names[j].name2 : key_names[j].name + 4);
                             
                             conPrintf("    %-10s : %s", buffer, curProfile->binds[k].command[m]);
@@ -1166,7 +1269,10 @@ void bindListSave(char * pch, int silent)
                     {
                         if(curProfile->binds[k].command[m] && *curProfile->binds[k].command[m] )
                         {
-                            fprintf(file, "%s%s \"%s\"\n",    m == MODIFIER_CTRL ? "CTRL+" :    m == MODIFIER_SHIFT ? "SHIFT+" : m == MODIFIER_ALT ? "ALT+" :"",
+                            char prefix[32];
+
+                            keybind_modifierPrefix(m, prefix, sizeof(prefix));
+                            fprintf(file, "%s%s \"%s\"\n", prefix,
                                         key_names[j].name2 ? key_names[j].name2 : key_names[j].name + 4, curProfile->binds[k].command[m]);
                         }
                     }

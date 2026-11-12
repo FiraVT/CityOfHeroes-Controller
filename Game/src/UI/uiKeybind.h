@@ -2,6 +2,7 @@
 #define UIKEYBIND_H
 
 #include <utilitieslib/stdtypes.h>
+#include "entity/keybindModifier.h"
 
 #define BIND_MAX 256
 
@@ -38,7 +39,9 @@ typedef enum ModTypes
     MODIFIER_CTRL,
     MODIFIER_SHIFT,
     MODIFIER_ALT,
-    MOD_TOTAL,
+    // Gamepad modifier mixes follow; see entity/keybindModifier.h.
+    MODIFIER_PAD_FIRST = KEYBIND_MODIFIER_PAD_FIRST,
+    MOD_TOTAL = KEYBIND_MODIFIER_COUNT,
 }ModTypes;
 
 typedef struct KeyBind
@@ -78,6 +81,45 @@ typedef struct KeyBindProfile
 
 char *keyName(int num);
 int keybind_modifier( int keyvalue );
+
+/*
+ * Modifier number for a mix of gamepad modifier bits (KEYBIND_PADMOD_*).
+ * Returns MODIFIER_NONE for 0. Bits outside KEYBIND_PADMOD_ALL are ignored.
+ */
+int keybind_padModifier(int mask);
+
+/*
+ * Gamepad modifier bits of a modifier number, or 0 for MODIFIER_NONE, Ctrl,
+ * Shift, Alt and out of range numbers.
+ */
+int keybind_padMask(int mod);
+
+/*
+ * Write the bind prefix of a modifier number, such as "SHIFT+" or "LT+RB+",
+ * into @out, @outSize bytes, at least 16. Writes "" for MODIFIER_NONE.
+ */
+void keybind_modifierPrefix(int mod, char *out, size_t outSize);
+
+/*
+ * Set the gamepad modifiers for the key events that follow.
+ *
+ * The gamepad code calls this before each pad key event it sends through
+ * inpUpdateKey(), with the mix that was held when that button went down, so
+ * a release finds the same bind as its press, and sets it back to 0 after.
+ * A bind for the mix wins over the key's plain bind. Global state: read by
+ * keybind_findCommand() until changed again.
+ */
+void keybind_setPadModifiers(int mask);
+
+/*
+ * Set the gamepad modifiers held right now. The gamepad code keeps this up
+ * to date whenever a trigger or bumper goes down or up. A +hold command
+ * bound to a pad mix stays pressed while every modifier of its mix is held,
+ * as Shift+key does for Shift; bindCheckKeysReleased() releases it once one
+ * is let go. Global state, read by bindCheckKeysReleased().
+ */
+void keybind_setPadModifiersHeld(int mask);
+
 void ParseBindings();
 
 void keybinds_init( const char *profile, KeyBindProfile *kbp, KeyBind *kb );

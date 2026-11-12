@@ -32,6 +32,7 @@
 #include "dbcomm/logcomm.h"
 #include "player/badges_server.h"
 #include "accountservercomm.h"
+#include "entity/keybindModifier.h"
 
 /**********************************************************************func*
  * character_IsLeveling
@@ -1559,7 +1560,7 @@ static bool repairKeybindCorruption(Entity *e, int justChecking)
         if ( e->pl->keybinds[i].key )
         {
             last_idx = i;
-            if ( e->pl->keybinds[i].modifier >= 4 || e->pl->keybinds[i].modifier < 0 )
+            if ( e->pl->keybinds[i].modifier >= KEYBIND_MODIFIER_COUNT || e->pl->keybinds[i].modifier < 0 )
             {
                 ret = 1;
                 if ( justChecking )

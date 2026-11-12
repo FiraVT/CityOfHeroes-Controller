@@ -205,6 +205,8 @@ static char* keymap_getName( int mod, int keyindex )
             strcpy( keyname, textStd( "INP_SHIFT" ));
         if( mod == MODIFIER_ALT )
             strcpy( keyname, textStd( "INP_ALT" ));
+	if (keybind_padMask(mod))
+		keybind_modifierPrefix(mod, keyname, sizeof(keyname));
     }
 
     for( i = 0; i < sizeof(allowable_inputs)/sizeof(EntryType); i++ )
