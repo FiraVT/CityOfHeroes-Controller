@@ -50,6 +50,14 @@ void cd_exit(void);
 int contactWindow(void);
 
 
+// Where the first response is drawn, in client coordinates. options changes
+// whenever the dialogue shows a new set of responses. Returns 0 if no responses
+// are on screen.
+int contactDialogFirstOption(int *x, int *y, U32 *options);
+int contactDialogOptionCount(void);
+int contactDialogOptionPos(int index, int *x, int *y);
+void contactDialogClose(void);
+
 #endif /* #ifndef UICONTACTDIALOG_H__ */
 
 /* End of File */

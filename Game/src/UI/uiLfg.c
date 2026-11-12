@@ -28,6 +28,8 @@
 #include "UI/uiUtil.h"
 #include "UI/uiToolTip.h"
 #include "win/input.h"
+#include "sound/sound.h"
+#include "win/gamepad.h"
 #include <utilitieslib/utils/utils.h>
 #include "entity/classes.h"
 #include "entity/origins.h"
@@ -724,6 +726,49 @@ static void drawLeagueModeButton(float x, float y, float z, float wd, float heig
 // Main Window
 //---------------------------------------------------------------------------------------
 
+// Y on the pad at the Search tab: invite the player whose row the pointer is
+// on.
+static int s_padInvite;
+
+void lfg_padInvite(void)
+{
+	s_padInvite = 1;
+}
+
+static void lfg_runPadInvite(Entity *e)
+{
+	Lfg *item = NULL;
+	char buf[128];
+	int i;
+
+	s_padInvite = 0;
+	if (!lfgListView)
+		return;
+
+	for (i = 0; i < eaSize(&lfgListView->items) &&
+		    i < eaSize(&lfgListView->itemWindows);
+	     i++) {
+		if (uiMouseCollision(lfgListView->itemWindows[i]))
+			item = lfgListView->items[i];
+	}
+	if (!item)
+		item = lfgListView->selectedItem;
+
+	if (!item || item->dbid == e->db_id) {
+		gamepadDebugNote(
+			item ? "search invite: that is you"
+			     : "search invite: no row under the pointer");
+		sndPlay("N_Error", SOUND_GAME);
+		return;
+	}
+
+	lfgListView->selectedItem = item;
+	sprintf(buf, "%s %s", (showLFGmode == WDW_LEAGUE) ? "li" : "i",
+		item->name);
+	gamepadDebugNote(buf);
+	cmdParse(buf);
+}
+
 int lfgWindow()
 {
     Entity *e = playerPtr();
@@ -865,6 +910,7 @@ int lfgWindow()
     // Do nothing if the friendlist is empty.
     if( eaSize( &lfgList ) == 0 )
     {
+        s_padInvite = 0;
         int fontHeight = ttGetFontHeight(font_grp, scale, scale);
           clipperPushRestrict(&windowDrawArea);
           font_color( CLR_WHITE, CLR_WHITE );
@@ -936,6 +982,9 @@ int lfgWindow()
 
     // Handle list view input.
      uiLVHandleInput(lfgListView, pen);
+
+    if (s_padInvite)
+        lfg_runPadInvite(e);
 
     if(lfg_TargetIsInList())
     {

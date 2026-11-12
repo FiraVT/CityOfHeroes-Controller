@@ -600,7 +600,9 @@ static void smf_InteractWithMouse(SMBlock *pBlock, TextAttribs *pattrs, CBox *bo
         return;
     }
 
-    if (mouseCollision(box) && pBlock->pSMFBlock)
+    // Each word is offered to the mouse for selecting text, but not to the gamepad, whose D-pad would
+    // otherwise stop on every word of a description before reaching the buttons under it.
+    if (mouseCollisionQuiet(box) && pBlock->pSMFBlock)
     {
         // eat the SMFBlock's click and drag if we're directly over a SMBlock...
         // let the SMBlock code handle it.
@@ -664,8 +666,8 @@ static void smf_InteractWithMouse(SMBlock *pBlock, TextAttribs *pattrs, CBox *bo
         if (isDown(MS_LEFT) && !mouseDragging() && !gScrollBarDraggingLastFrame)
         {
             if ((pBlock->pSMFBlock && pBlock->pSMFBlock->scissorsBox &&
-                 !mouseCollision(pBlock->pSMFBlock->scissorsBox)) ||
-                !mouseCollision(box))
+                 !mouseCollisionQuiet(pBlock->pSMFBlock->scissorsBox)) ||
+                !mouseCollisionQuiet(box))
             {
                 if (!smf_stopSettingTheSelectionThisFrame)
                 {
@@ -739,9 +741,9 @@ static void smf_InteractWithMouse(SMBlock *pBlock, TextAttribs *pattrs, CBox *bo
     }
     else
     {
-        if (mouseCollision(box) && !mouseDragging() && 
+        if (mouseCollisionQuiet(box) && !mouseDragging() && 
             !gScrollBarDraggingLastFrame && smfBlock_HasFocus(pBlock->pSMFBlock) &&
-            (!pBlock->pSMFBlock->scissorsBox || mouseCollision(pBlock->pSMFBlock->scissorsBox)))
+            (!pBlock->pSMFBlock->scissorsBox || mouseCollisionQuiet(pBlock->pSMFBlock->scissorsBox)))
         {
             if (!smf_stopSettingTheSelectionThisFrame)
             {

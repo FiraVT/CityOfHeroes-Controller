@@ -1,3 +1,4 @@
+#include "win/gamepadNav.h"
 #include <utilitieslib/stdtypes.h>
 #include "uiListView.h"
 #include <utilitieslib/assert/assert.h>
@@ -199,6 +200,31 @@ Widget3Part ColumnSelectedHeaderParts =
 // UIColumnHeader 
 //--------------------------------------------------------------------------------------------------------------------
 #include <utilitieslib/components/earray.h>
+
+// A column's resize handle answers the mouse as before, but is kept from the
+// gamepad's D-pad, where A on it would start dragging the column.
+static int listViewHandleCollision(CBox *box)
+{
+	int navWindow = gamepadNavGetWindow();
+	int hit;
+
+	gamepadNavSetWindow(NAV_IGNORED);
+	hit = mouseCollision(box);
+	gamepadNavSetWindow(navWindow);
+	return hit;
+}
+
+static int listViewHandleDrag(CBox *box)
+{
+	int navWindow = gamepadNavGetWindow();
+	int hit;
+
+	gamepadNavSetWindow(NAV_IGNORED);
+	hit = mouseLeftDrag(box);
+	gamepadNavSetWindow(navWindow);
+	return hit;
+}
+
 
 UIColumnHeader* uiCHCreate(void)
 {
@@ -607,7 +633,7 @@ void uiLVHDisplay(UIListViewHeader* header, float x, float y, float z, float sca
                 }
 
             }
-            else if( !gListViewDragging && mouseCollision(&b) )
+            else if( !gListViewDragging && listViewHandleCollision(&b) )
             {
                 color = 0xffffff44;
                  for( i = 0; i < 4; i++ )
@@ -621,7 +647,7 @@ void uiLVHDisplay(UIListViewHeader* header, float x, float y, float z, float sca
 
               drawVerticalLine( tx, y + 7*scale, headerHeight - 14*scale, z+5, scale, color );
 
-             if( mouseLeftDrag( &b ) && !column->dragging && !gListViewDragging )
+             if( listViewHandleDrag( &b ) && !column->dragging && !gListViewDragging )
             {
                 column->dragging = gListViewDragging = true;
                 ShowCursor(0);
@@ -788,6 +814,16 @@ void uiLVHandleInput(UIListView* list, PointFloatXYZ origin)
         {
             for(i = 0; i < eaSize(&list->itemWindows); i++)
             {
+                // A row cut off at the edge of the list can still be clicked where it shows, but the
+                // gamepad's D-pad must not land on it, since the pointer would sit outside the list.
+                int navWindow = gamepadNavGetWindow();
+                UIBox *row = list->itemWindows[i];
+                int hidden = row && (row->y + row->height / 2 < listViewItemDrawArea.y ||
+                                     row->y + row->height / 2 > listViewItemDrawArea.y + listViewItemDrawArea.height);
+
+                if (hidden)
+                    gamepadNavSetWindow(NAV_IGNORED);
+
                 // Did the user click on one of the items?
                   if(uiMouseUpHit(list->itemWindows[i], MS_LEFT) || uiMouseClickHit(list->itemWindows[i], MS_RIGHT))
                 {
@@ -800,6 +836,24 @@ void uiLVHandleInput(UIListView* list, PointFloatXYZ origin)
                 {
                     list->mouseOverItem = list->items[i];
                 }
+
+                gamepadNavSetWindow(navWindow);
+            }
+        }
+        else
+        {
+            // Hit testing a row is what tells the gamepad's D-pad it is there, so the rows in view are
+            // tested even with the pointer elsewhere, as on the header above them. Nothing is selected.
+            for(i = 0; i < eaSize(&list->itemWindows); i++)
+            {
+                UIBox *row = list->itemWindows[i];
+                float middle;
+
+                if(!row)
+                    continue;
+                middle = row->y + row->height / 2;
+                if(middle >= listViewItemDrawArea.y && middle <= listViewItemDrawArea.y + listViewItemDrawArea.height)
+                    uiMouseCollision(row);
             }
         }
     }

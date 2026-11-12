@@ -1,4 +1,5 @@
 
+#include "win/gamepad.h"
 #include "win/win_init.h" // for windowClientSize
 
 #include "UI/uiUtil.h"
@@ -54,6 +55,8 @@ int doScrollBarDebug(ScrollBar *sb, int view_ht, int doc_ht, int xp, int yp, int
 
 int doScrollBarEx( ScrollBar *sb, int view_ht, int doc_ht, int xp, int yp, int zp, CBox * cbox, UIBox * uibox, float screenScaleX, float screenScaleY )
 {
+    float wheelStart = 0;
+    int wheelUsed = 0;
     int color = CLR_WHITE, bcolor, gripColor = 0xffffff88, i;
     static int upTimer = 0, downTimer = 0;
       float    x = 0, y = 0, z = zp, wd = 0, ht = 0, scale = 1.f;
@@ -329,9 +332,11 @@ int doScrollBarEx( ScrollBar *sb, int view_ht, int doc_ht, int xp, int yp, int z
     if( upHit || downHit )
         collisions_off_for_rest_of_frame = TRUE;
 
+    wheelStart = sb->offset;
     if( scrollable && !optionGet(kUO_DisableMouseScroll) )
     {
         int scroll_wheel = gMouseInpCur.z - gMouseInpLast.z;
+	wheelUsed = scroll_wheel != 0;
         if(scroll_wheel < 0)
             sb->offset += optionGetf(kUO_MouseScrollSpeed)*scale;
         else if(scroll_wheel > 0)
@@ -378,6 +383,11 @@ int doScrollBarEx( ScrollBar *sb, int view_ht, int doc_ht, int xp, int yp, int z
         sb->offset = extraSpace ;//+ buttonSize - (top->height + buttonScale*mid->height + bot->height);
     if( sb->offset < 0 )
         sb->offset = 0;
+
+    // How far the wheel really moved this list, for a controller following its
+    // focus down the rows.
+    if (wheelUsed)
+	    gamepadNoteListScroll(sb->offset - wheelStart);
 
     if( sb->horizontal )
     {

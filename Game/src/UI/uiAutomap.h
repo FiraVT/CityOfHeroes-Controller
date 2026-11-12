@@ -106,5 +106,20 @@ void automap_drawMapHeader(ArchitectMapHeader * header, F32 x, F32 y, F32 z, F32
 void automap_drawSubmapFloor(ArchitectMapSubMap * map, ArchitectMapSubMap *itemsLoc, ArchitectMapSubMap *spawnsLoc, F32 x, F32 y, F32 z, F32 wd, F32 ht, F32 sc, F32 useStretch);
 void automap_showAllMaps(int on);    //allow all maps to be displayed in the map window.
 #endif
+
+// Gamepad control of the map, for the console Navigation screen.
+// Moves the map by this many pixels, as dragging it would.
+void automapPadPan(float dx, float dy);
+// Zooms around the middle of the map by this factor, within the map's own
+// limits.
+void automapPadZoom(float factor);
+// Centres the map on the player and lets it follow them until the pad moves or
+// zooms it.
+void automapPadStart(void);
+// Switches between the City view and the Zone, or Mission, view.
+void automapPadSwitchView(void);
+// Where the player's own marker was last drawn, in client pixels. False before
+// the map has drawn.
+int automapPadPlayerPos(float *x, float *y);
 // End mkproto
 #endif

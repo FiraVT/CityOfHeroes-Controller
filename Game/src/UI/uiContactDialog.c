@@ -835,6 +835,40 @@ static void contactWindowCreateFlashbackTree(int isHero)
  * cd_exit
  *
  */
+static U32 s_contactOptions;
+#define MAX_TRACKED_OPTIONS 16
+static int s_optionCount;
+static int s_optionX[MAX_TRACKED_OPTIONS];
+static int s_optionY[MAX_TRACKED_OPTIONS];
+
+int contactDialogOptionCount(void)
+{
+	return window_getMode(WDW_CONTACT_DIALOG) == WINDOW_DISPLAYING
+		       ? s_optionCount
+		       : 0;
+}
+
+int contactDialogOptionPos(int index, int *x, int *y)
+{
+	if (index < 0 || index >= contactDialogOptionCount())
+		return 0;
+
+	*x = s_optionX[index];
+	*y = s_optionY[index];
+	return 1;
+}
+
+int contactDialogFirstOption(int *x, int *y, U32 *options)
+{
+	*options = s_contactOptions;
+	return contactDialogOptionPos(0, x, y);
+}
+
+void contactDialogClose(void)
+{
+	cd_exit();
+}
+
 void cd_exit(void)
 {
     int count;
@@ -894,6 +928,9 @@ void cd_SetBasic(CDtype type, char *body, ContactResponseOption **rep,
 
     memset(cdMaster, 0, sizeof(ContactDialog));
 
+    s_contactOptions++;
+    s_optionCount = 0;
+
     cdMaster->selected = false;
     cdMaster->type = type;
 
@@ -938,6 +975,13 @@ static int cd_DisplayButtons(ContactDialog *cd, float scale)
             str_dims( &game_12, sc*scale, sc*scale, false, &box, cd->responses[i]->responsetext );
 
         //drawBox(&box, 0, 0xff0000ff, 0);
+
+	if (i < MAX_TRACKED_OPTIONS) {
+		s_optionX[i] = (int)((box.upperLeft.x + box.lowerRight.x) / 2);
+		s_optionY[i] = (int)((box.upperLeft.y + box.lowerRight.y) / 2);
+		s_optionCount =
+			MIN(eaSize(&cd->responses), MAX_TRACKED_OPTIONS);
+	}
 
         if( mouseCollision( &box ) )
         {

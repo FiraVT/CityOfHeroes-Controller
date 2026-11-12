@@ -16,5 +16,14 @@ bool powerIsMarkedForTrade( Power * pow );
 void uiTrade_UpdateRecipeInventoryCount( Entity *e, int idx, int id );
 void uiTrade_UpdateSalvageInventoryCount( Entity *e,int idx );
 int inspIsMarkedForTrade( Entity *e, int i, int j );
+void recipeMarkForTrade(Entity *e, int idx, int count);
+void recipeRemoveFromTrade(int idx, int count);
+
+// For the console HUD's trade screen.
+void consoleTradeRemoveInspiration(int i, int j);
+void consoleTradeRemoveEnhancement(int idx);
+void consoleTradeSetInfluence(int amount);
+void consoleTradeSetOffered(int offered);
+void consoleTradeCancel(void);
 
 #endif

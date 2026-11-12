@@ -543,6 +543,24 @@ TrayObj *trayslot_Get( Entity *e, TrayCategory tray_cat, int tray_num, int slot_
         return NULL;
 }
 
+// The slot that a powexec command for this tray would fire.
+TrayObj *trayslot_GetCurrent(Entity *e, CurTrayType tray, int slot)
+{
+	if (!e || !e->pchar || !e->pl)
+		return NULL;
+
+	if (tray == kCurTrayType_Primary &&
+	    character_IsInPowerMode(e->pchar, kPowerMode_ServerTrayOverride))
+		return trayslot_Get(e, kTrayCategory_ServerControlled, 0, slot);
+
+	tray = tray_razer_adjust(tray);
+	if (!INRANGE(tray, kCurTrayType_Primary, kCurTrayType_Count))
+		return NULL;
+
+	return trayslot_Get(e, kTrayCategory_PlayerControlled,
+			    e->pl->tray->current_trays[tray], slot);
+}
+
 //
 //
 static int inTray( TrayObj * power, int tray_num )
@@ -2353,6 +2371,11 @@ void trayslot_drawIcon( TrayObj * ts, float xp, float yp, float zp, float scale,
 // curTrayType: the alt-level of the tray (kCurTrayType_Primary, etc.)
 // -AB: refactored for new cur tray functionality :2005 Jan 26 03:41 PM
 //----------------------------------------------------------
+static int traySlotBare; // the console HUD draws its own frame and button marks
+			 // around the slot
+static int traySlotNoFire; // a click does not fire the power, on the binding
+			   // screen
+
 void trayslot_Display( Entity *e, int slotNumber, int raw_tray_value, int curTrayType, float xp, float yp, float z,
                             float scale, int color, int window )
 {
@@ -2365,7 +2388,8 @@ void trayslot_Display( Entity *e, int slotNumber, int raw_tray_value, int curTra
     TrayCategory currentCategory = (raw_tray_value == -1 ? kTrayCategory_ServerControlled : kTrayCategory_PlayerControlled);
     int currentTray = (raw_tray_value == -1 ? 0 : raw_tray_value);
     TrayObj *ts = trayslot_Get(e, currentCategory, currentTray, slotNumber);
-    ToolTipParent *tipParent = (window == WDW_TRAY ? &trayTipParent : NULL);
+    ToolTipParent *tipParent =
+	    (window == WDW_TRAY && !traySlotBare ? &trayTipParent : NULL);
 
     CBox box;
 
@@ -2408,7 +2432,10 @@ void trayslot_Display( Entity *e, int slotNumber, int raw_tray_value, int curTra
     STR_COMBINE_CAT(".tga");
     STR_COMBINE_END();
     spr = atlasLoadTexture( temp );
-    display_sprite( spr, xp - scale*BOX_SIDE/2, yp + (BOX_SIDE/2 - spr->height)*scale, zp + 3, scale, scale, CLR_WHITE );
+    if (!traySlotBare)
+	    display_sprite(spr, xp - scale * BOX_SIDE / 2,
+			   yp + (BOX_SIDE / 2 - spr->height) * scale, zp + 3,
+			   scale, scale, CLR_WHITE);
 
     if( type == kTrayItemType_None ) // empty tray slot
     {
@@ -2452,9 +2479,18 @@ void trayslot_Display( Entity *e, int slotNumber, int raw_tray_value, int curTra
             }
         }
 
-        display_sprite( power_ring, xp - sc*power_ring->width*scale/2, yp - sc*power_ring->height*scale/2, zp + 2, scale*sc, scale*sc, color );
-        display_sprite( power_back, xp - holesc*scale*sc*power_back->width/2,
-                        yp - holesc*scale*sc*power_back->height/2, zp+1, holesc*scale*sc, holesc*scale*sc, 0xffffff66 );
+	if (!traySlotBare) {
+		display_sprite(power_ring,
+			       xp - sc * power_ring->width * scale / 2,
+			       yp - sc * power_ring->height * scale / 2, zp + 2,
+			       scale * sc, scale * sc, color);
+		display_sprite(power_back,
+			       xp - holesc * scale * sc * power_back->width / 2,
+			       yp - holesc * scale * sc * power_back->height /
+					       2,
+			       zp + 1, holesc * scale * sc, holesc * scale * sc,
+			       0xffffff66);
+	}
 
         if (mouseCollision(&box))
             setToolTip(&traySlotToolTip, &box, "EmptyTraySlot", tipParent, MENU_GAME, window);
@@ -2516,7 +2552,7 @@ void trayslot_Display( Entity *e, int slotNumber, int raw_tray_value, int curTra
             cursor.drag_obj.itray = currentTray;
             cursor.drag_obj.icat = currentCategory;
         }
-        else if( mouseCollision( &box ) )
+        else if( mouseCollision( &box ) && !traySlotNoFire )
         {
             // first draw the icon
             if ( mouseClickHit( &box, MS_LEFT) ) // is there was a mouse press
@@ -2602,6 +2638,59 @@ void trayslot_Display( Entity *e, int slotNumber, int raw_tray_value, int curTra
                 setToolTipEx( &traySlotToolTip, &box, ts->shortName, tipParent, MENU_GAME, window, 0, TT_NOTRANSLATE );
         }
     }
+}
+
+// The current tray of a type, or -1 for the server's tray, which belongs to the
+// mission and not the player.
+static int trayslot_CurrentIndex(Entity *e, CurTrayType tray)
+{
+	if (tray == kCurTrayType_Primary &&
+	    character_IsInPowerMode(e->pchar, kPowerMode_ServerTrayOverride))
+		return -1;
+
+	return e->pl->tray->current_trays[tray_razer_adjust(tray)];
+}
+
+// A tray slot with all its mouse handling, sized to fit a cell of the console
+// HUD.
+void trayslot_DisplayBare(Entity *e, CurTrayType tray, int slot, float x,
+			  float y, float z, float size, int color, int canFire)
+{
+	traySlotBare = TRUE;
+	traySlotNoFire = !canFire;
+	trayslot_Display(e, slot, trayslot_CurrentIndex(e, tray),
+			 tray_razer_adjust(tray), x, y, z, size / BOX_SIDE,
+			 color, WDW_TRAY);
+	traySlotBare = FALSE;
+	traySlotNoFire = FALSE;
+}
+
+// Puts a power straight into a slot. A tray holds a power once, so this moves
+// it if it is already there.
+int trayslot_Place(Entity *e, CurTrayType tray, int slot, TrayObj *obj)
+{
+	int index = trayslot_CurrentIndex(e, tray);
+	int build = e->pchar->iCurBuild;
+	int i;
+
+	if (index < 0)
+		return FALSE;
+
+	for (i = 0; i < TRAY_SLOTS; i++) {
+		const TrayObj *other = trayslot_Get(
+			e, kTrayCategory_PlayerControlled, index, i);
+
+		if (i != slot && other && other->type == kTrayItemType_Power &&
+		    other->iset == obj->iset && other->ipow == obj->ipow)
+			clearTrayObj(e->pl->tray,
+				     kTrayCategory_PlayerControlled, index, i,
+				     build);
+	}
+
+	trayobj_copy(getTrayObj(e->pl->tray, kTrayCategory_PlayerControlled,
+				index, slot, build, true),
+		     obj, TRUE);
+	return TRUE;
 }
 
 CurTrayType tray_razer_adjust( CurTrayType tray )
@@ -3217,6 +3306,8 @@ void serverTray_Rebuild()
 //
 // -AB: refactored trays to support more than one alt tray :2005 Feb 01 02:25 PM
 // -AB: added test for zero height to slam the height to the desired height. :2005 Feb 01 02:25 PM
+int consoleHudHidesWindow(int window);
+
 int trayWindow()
 {
     static int init = FALSE, lastAltShow;
@@ -3274,6 +3365,11 @@ int trayWindow()
     }
 
     power_clearActive();
+
+    // The console HUD shows these slots instead. Everything above this line is
+    // upkeep it still needs.
+    if (consoleHudHidesWindow(WDW_TRAY))
+	    return 0;
 
     // x and y are unreliable here
     // they represent the upper-left corner, which changes in the code that follows

@@ -4,6 +4,9 @@
 
 
 int lfgWindow();
+// Invites the player on the row under the pointer, for Y on the pad. Runs as
+// the window next draws.
+void lfg_padInvite(void);
 
 void lfg_clearAll();
 void lfg_add( char * name, int archetype, int origin, int level, int lfg,

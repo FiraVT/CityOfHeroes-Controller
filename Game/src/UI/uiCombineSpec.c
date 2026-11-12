@@ -622,6 +622,41 @@ static void combo_unslotPowerSpec(void * data)
     sndPlay( "Delete", SOUND_GAME );
 }
 
+int combo_unslotToInventory(int iset, int ipow, int ispec, int ask)
+{
+	Character *pchar = playerPtr()->pchar;
+	const SalvageItem *item = salvage_GetItem("S_EnhancementUnslotter");
+	int invSpot;
+
+	if (!item || character_SalvageCount(pchar, item) <= 0)
+		return UNSLOT_NO_UNSLOTTER;
+
+	for (invSpot = 0;
+	     invSpot < pchar->iNumBoostSlots && invSpot < CHAR_BOOST_MAX;
+	     invSpot++) {
+		if (!pchar->aBoosts[invSpot])
+			break;
+	}
+	if (invSpot >= pchar->iNumBoostSlots || invSpot >= CHAR_BOOST_MAX)
+		return UNSLOT_INVENTORY_FULL;
+
+	memset(&unslotMe, 0, sizeof(unslotMe));
+	unslotMe.iset = iset;
+	unslotMe.ipow = ipow;
+	unslotMe.ispec = ispec;
+	unslotInvLocation = invSpot;
+
+	// The same question the drag asks, unless it was turned off or already
+	// asked.
+	if (!ask || optionGet(kUO_HideUnslotPrompt))
+		combo_unslotPowerSpec(0);
+	else
+		dialog(DIALOG_YES_NO, -1, -1, -1, -1, "ReallyUnslotEnhancement",
+		       NULL, combo_unslotPowerSpec, NULL, NULL, 0, sendOptions,
+		       unslotDCB, 1, 0, 0, 0);
+	return UNSLOT_STARTED;
+}
+
 // TODO: add tooltip and CM?
 //
 static void s_drawMenuInventoryEnhancement( Character *pchar, int ispec, float centerX, float centerY, float z, float screenScaleX, float screenScaleY )
@@ -791,6 +826,112 @@ void spec_replace(void *data)
             // Alert the server of the change
             spec_sendSetPower( sr.iset, sr.ipow, sr.idx, sr.ispec );
         }
+    }
+}
+
+// The same test a drop on the Manage screen makes: may inventory enhancement idx go in this power's slot?
+int spec_CanPlace( Character *pchar, int iset, int ipow, int ispec, int idx )
+{
+    Power *pow;
+    Boost *boost;
+    int slot_req;
+
+    if( !pchar || iset < 0 || iset >= eaSize(&pchar->ppPowerSets) || idx < 0 || idx >= pchar->iNumBoostSlots )
+        return FALSE;
+
+    pow = pchar->ppPowerSets[iset]->ppPowers[ipow];
+    boost = pchar->aBoosts[idx];
+    if( !pow || !boost || ispec < 0 || ispec >= eaSize(&pow->ppBoosts) )
+        return FALSE;
+
+    if( !boost_IsValidToSlotAtLevel(boost, pchar->entParent, character_CalcExperienceLevel(pchar), pchar->entParent->erOwner) ||
+        !power_IsValidBoost(pow, boost) || !power_BoostCheckRequires(pow, boost) )
+    {
+        return FALSE;
+    }
+
+    slot_req = power_ValidBoostSlotRequired(pow, boost);
+    return slot_req < 0 || slot_req == ispec;
+}
+
+int spec_PlaceQuestion( int iset, int ipow, int ispec, int idx )
+{
+    Entity *e = playerPtr();
+    Character *pchar = e ? e->pchar : NULL;
+    Boost *spec, *dragSpec;
+
+    if( !spec_CanPlace(pchar, iset, ipow, ispec, idx) )
+        return PLACE_INVALID;
+
+    spec = pchar->ppPowerSets[iset]->ppPowers[ipow]->ppBoosts[ispec];
+    dragSpec = pchar->aBoosts[idx];
+
+    if( spec && dragSpec->ppowBase && !dragSpec->ppowBase->bBoostIgnoreEffectiveness &&
+        (dragSpec->iLevel + dragSpec->iNumCombines < spec->iLevel + spec->iNumCombines ||
+         (dragSpec->iLevel == spec->iLevel && dragSpec->iNumCombines == spec->iNumCombines && dragSpec->ppowBase == spec->ppowBase)) )
+    {
+        return PLACE_REPLACE_WORSE;
+    }
+    if( optionGet(kUO_HidePlacePrompt) )
+        return PLACE_NO_QUESTION;
+    return spec ? PLACE_REPLACE : PLACE_NEW;
+}
+
+void spec_PlaceFromInventoryNow( int iset, int ipow, int ispec, int idx, float x, float y, float z )
+{
+    Entity *e = playerPtr();
+    Character *pchar = e ? e->pchar : NULL;
+
+    if( !spec_CanPlace(pchar, iset, ipow, ispec, idx) || dialogInQueue(NULL, spec_replace, NULL) )
+        return;
+
+    sr.x = x;
+    sr.y = y;
+    sr.z = z;
+    sr.iset = iset;
+    sr.ipow = ipow;
+    sr.ispec = ispec;
+    sr.idx = idx;
+    sr.pow = pchar->ppPowerSets[iset]->ppPowers[ipow];
+    spec_replace(0);
+}
+
+// Places inventory enhancement idx in a power's slot the way a drop on the Manage screen does, with the
+// same questions before anything is replaced. Combining is left to the Manage screen itself.
+void spec_PlaceFromInventory( int iset, int ipow, int ispec, int idx, float x, float y, float z )
+{
+    Entity *e = playerPtr();
+    Character *pchar = e ? e->pchar : NULL;
+    Boost *spec, *dragSpec;
+
+    if( !spec_CanPlace(pchar, iset, ipow, ispec, idx) || dialogInQueue(NULL, spec_replace, NULL) )
+        return;
+
+    sr.x = x;
+    sr.y = y;
+    sr.z = z;
+    sr.iset = iset;
+    sr.ipow = ipow;
+    sr.ispec = ispec;
+    sr.idx = idx;
+    sr.pow = pchar->ppPowerSets[iset]->ppPowers[ipow];
+
+    spec = sr.pow->ppBoosts[ispec];
+    dragSpec = pchar->aBoosts[idx];
+
+    if( spec && dragSpec->ppowBase && !dragSpec->ppowBase->bBoostIgnoreEffectiveness &&
+        (dragSpec->iLevel + dragSpec->iNumCombines < spec->iLevel + spec->iNumCombines ||
+         (dragSpec->iLevel == spec->iLevel && dragSpec->iNumCombines == spec->iNumCombines && dragSpec->ppowBase == spec->ppowBase)) )
+    {
+        dialog( DIALOG_YES_NO, -1, -1, -1, -1, "ReallyBadReplaceEnhancement", NULL, spec_replace, NULL, NULL,0,0,0,1,0,0,0 );
+    }
+    else if( optionGet(kUO_HidePlacePrompt) )
+    {
+        spec_replace(0);
+    }
+    else
+    {
+        dialog( DIALOG_YES_NO, -1, -1, -1, -1, spec ? "ReallyReplaceEnhancement" : "ReallyPlaceEnhancement", NULL, spec_replace, NULL, NULL,0,sendOptions,placeDCB,1,0,0,0 );
     }
 }
 

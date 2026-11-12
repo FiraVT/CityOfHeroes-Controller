@@ -8,6 +8,11 @@
 #include "entity/entrecv.h"
 #include "entity/motion.h"
 #include "win/input.h"
+#if !TEST_CLIENT
+#include "win/gamepad.h"
+#else
+#define gamepadLookHeld() 0
+#endif
 #include "player/pmotion.h"
 #include <utilitieslib/network/netcomp.h>
 #include "clientcomm/clientcomm.h"
@@ -489,7 +494,7 @@ static void playerProcessMouseInput(ControlState *controls, Vec3 playerPyr, Vec3
             pitch[0] =  maxsnap;
 
     }
-    else if (optionGet(kUO_MousePitchOption)  == MOUSEPITCH_FIXED) // not canlook, but pitch is fixed
+    else if (optionGet(kUO_MousePitchOption)  == MOUSEPITCH_FIXED && !gamepadLookHeld()) // not canlook, but pitch is fixed
     {
         d = subAngle(BestPitchAngle(game_state.camdist),cameraPyr[0]);
         if (d > pitch_snap) d = pitch_snap;
@@ -532,6 +537,10 @@ static void playerProcessMouseInput(ControlState *controls, Vec3 playerPyr, Vec3
         if (xzspeed2 > maxspeed2) xzspeed2 = maxspeed2;
         pitch_spring *= xzspeed2 / maxspeed2;
 
+	// if the camera stick is moving, spring doesn't happen
+	if (gamepadLookHeld())
+		pitch_spring = 0;
+
         // if player is moving mouse, spring doesn't happen
         if (inpIsMouseLocked())
         {
@@ -548,6 +557,164 @@ static void playerProcessMouseInput(ControlState *controls, Vec3 playerPyr, Vec3
         cameraPyr[0] = addAngle(d,cameraPyr[0]);
     }
 }
+
+#if !TEST_CLIENT
+static int playerIsControlDisabled(Entity *e, ControlState *controls);
+
+// The stick moves the character by turning it and holding forward. The camera
+// stays put because cam_pyr_offset takes up every turn, so the offset belongs
+// to the gamepad until it is folded back.
+static int gamepadOwnsCameraOffset;
+static int gamepadWasMoving;
+
+// Flying uses the camera pitch for the forward direction. Fading it by how far
+// the stick points away from the camera keeps sideways flight level, and
+// pulling back while looking up descends.
+static F32 gamepadMotionPitchScale = 1.0f;
+
+static void playerFoldGamepadCameraOffset(ControlState *controls)
+{
+	controls->pyr.cur[1] =
+		addAngle(controls->pyr.cur[1], controls->cam_pyr_offset[1]);
+	controls->cam_pyr_offset[1] = 0;
+	gamepadOwnsCameraOffset = 0;
+}
+
+static void playerApplyGamepadLook(ControlState *controls, F32 yaw, F32 pitch)
+{
+	F32 *pitchTarget =
+		controls->follow ? controls->cam_pyr_offset : controls->pyr.cur;
+	F32 y_sign = optionGet(kUO_MouseInvert) ? 1 : -1;
+	F32 maxPitch = RAD(90);
+
+	if (controls->first) {
+		controls->pyr.cur[1] = addAngle(controls->pyr.cur[1], yaw);
+	} else {
+		controls->cam_pyr_offset[1] =
+			addAngle(controls->cam_pyr_offset[1], yaw);
+		if (!controls->follow)
+			gamepadOwnsCameraOffset = 1;
+	}
+
+	if (yaw && controls->forcedTurn.turnCamera) {
+		controls->forcedTurn.turnCamera = 0;
+		cam_info.rotate_scale = 1;
+	}
+
+	if (!controls->first && !controls->server_state->fly &&
+	    !controls->nocoll)
+		maxPitch = RAD(70);
+
+	pitchTarget[0] += y_sign * -pitch;
+	if (pitchTarget[0] < -RAD(90))
+		pitchTarget[0] = -RAD(90);
+	if (pitchTarget[0] > maxPitch)
+		pitchTarget[0] = maxPitch;
+}
+
+static void playerTurnTowardGamepadHeading(ControlState *controls,
+					   F32 headingFromCamera)
+{
+	F32 cameraYaw =
+		addAngle(controls->pyr.cur[1], controls->cam_pyr_offset[1]);
+	F32 turn = subAngle(addAngle(cameraYaw, headingFromCamera),
+			    controls->pyr.cur[1]);
+	F32 maxTurn = gamepadTurnRate() * TIMESTEP;
+
+	if (turn > maxTurn)
+		turn = maxTurn;
+	else if (turn < -maxTurn)
+		turn = -maxTurn;
+
+	controls->pyr.cur[1] = addAngle(controls->pyr.cur[1], turn);
+	controls->cam_pyr_offset[1] = subAngle(cameraYaw, controls->pyr.cur[1]);
+	gamepadOwnsCameraOffset = 1;
+}
+
+static void playerGamepadLook(Entity *e, ControlState *controls)
+{
+	const int keyboardDirections = (1 << CONTROLID_HORIZONTAL_MAX) - 1;
+	F32 directionX, directionY, speed, yaw, pitch;
+	int moving = gamepadGetMove(&directionX, &directionY, &speed);
+	int canTurn;
+
+	gamepadMotionPitchScale = 1.0f;
+
+	if (controls->follow)
+		gamepadOwnsCameraOffset = 0;
+
+	// Mouse look and the keyboard steer by the character's facing, so hand
+	// it back the camera's.
+	if (gamepadOwnsCameraOffset && !moving &&
+	    (controls->canlook ||
+	     (controls->move_input[MOVE_INPUT_CMD] & keyboardDirections))) {
+		playerFoldGamepadCameraOffset(controls);
+	}
+
+	// The stick gives a speed, unlike the mouse's distance, so it has to be
+	// scaled by frame time.
+	if (gamepadGetLook(&yaw, &pitch))
+		playerApplyGamepadLook(controls, yaw * TIMESTEP,
+				       pitch * TIMESTEP);
+
+	canTurn = !controls->first && !controls->follow &&
+		  !controls->followForced &&
+		  controls->forcedTurn.timeRemaining <= 0 &&
+		  !forcedTurnHoldPYR && !playerIsControlDisabled(e, controls);
+
+	if (canTurn && moving) {
+		playerTurnTowardGamepadHeading(controls,
+					       atan2f(directionX, directionY));
+		gamepadMotionPitchScale = directionY;
+	} else if (canTurn && controls->autorun && gamepadOwnsCameraOffset) {
+		// Autorun steers with the camera stick.
+		playerTurnTowardGamepadHeading(controls, 0);
+	}
+}
+
+static void playerGamepadMovement(ControlState *controls)
+{
+	const int time = controls->time.last_send_ms;
+	F32 directionX = 0, directionY = 0, speed = 1;
+	int moving = gamepadGetMove(&directionX, &directionY, &speed) &&
+		     !controls->followForced;
+	int forward = 0, backward = 0, left = 0, right = 0;
+
+	if (moving && !gamepadWasMoving) {
+		// Pushing the stick cancels follow and autorun, like pressing a
+		// movement key.
+		if (controls->follow)
+			controls->movementControlUpdateCount++;
+		controls->autorun = 0;
+	}
+
+	if (moving && !controls->follow) {
+		if (controls->first) {
+			// First person has no camera offset to absorb a turn,
+			// so it moves in eight directions.
+			forward = directionY > 0.38f;
+			backward = directionY < -0.38f;
+			right = directionX > 0.38f;
+			left = directionX < -0.38f;
+		} else {
+			forward = 1;
+		}
+
+		controls->inp_vel_scale = speed;
+	} else if (gamepadWasMoving && !controls->follow) {
+		controls->inp_vel_scale = 1.0f;
+	}
+
+	updateControlState(CONTROLID_FORWARD, MOVE_INPUT_GAMEPAD, forward,
+			   time);
+	updateControlState(CONTROLID_BACKWARD, MOVE_INPUT_GAMEPAD, backward,
+			   time);
+	updateControlState(CONTROLID_LEFT, MOVE_INPUT_GAMEPAD, left, time);
+	updateControlState(CONTROLID_RIGHT, MOVE_INPUT_GAMEPAD, right, time);
+
+	gamepadWasMoving = moving;
+}
+#endif
 
 /* Function playerLook
  *    Adjust the player model and camera orientation based on user input.
@@ -614,6 +781,10 @@ static void playerLook(ControlState *controls)
                 cam_info.rotate_scale = 1;
             }
         }
+
+#if !TEST_CLIENT
+	playerGamepadLook(e, controls);
+#endif
     }
 
     // Update camera orientation.
@@ -634,10 +805,20 @@ static void playerLook(ControlState *controls)
     camSetPyr(pyr);
 }
 
+// The angle physics moves along, which is what the server must be told as well.
+static F32 playerMotionAngle(ControlState *controls, int index)
+{
+#if !TEST_CLIENT
+	if (index == 0 && controls->server_state->fly)
+		return controls->pyr.cur[0] * gamepadMotionPitchScale;
+#endif
+	return controls->pyr.cur[index];
+}
+
 static void playerQueueControlAngleChange(ControlState* controls, int index)
 {
     ControlId id = CONTROLID_PITCH + index;
-    U32 angleU32 = CSC_ANGLE_F32_TO_U32(controls->pyr.cur[index]);
+    U32 angleU32 = CSC_ANGLE_F32_TO_U32(playerMotionAngle(controls, index));
 
     if(angleU32 != controls->pyr.prev[index])
     {
@@ -711,7 +892,7 @@ static void playerAdjustBodyPYR(Entity* e, ControlState* controls)
         }
         else
         {
-            body_pyr[0] = controls->pyr.cur[0];
+		body_pyr[0] = playerMotionAngle(controls, 0);
             use_pitch = 1;
         }
     }
@@ -1677,7 +1858,7 @@ static void playerAdjustMotionPYR(Entity* e, ControlState* controls)
     
     for(i = 0; i < 2; i++)
     {
-        U32 angleU32 = CSC_ANGLE_F32_TO_U32(controls->pyr.cur[i]) & ((1 << CSC_ANGLE_BITS) - 1);
+        U32 angleU32 = CSC_ANGLE_F32_TO_U32(playerMotionAngle(controls, i)) & ((1 << CSC_ANGLE_BITS) - 1);
         
         controls->pyr.motion[i] = CSC_ANGLE_U32_TO_F32(angleU32);
     }
@@ -2211,6 +2392,9 @@ void playerGetInput()
 
             if(control_state.mapserver_responding || control_state.nocoll || control_state.alwaysmobile)
             {
+                 if(!control_state.detached_camera)
+                    playerGamepadMovement(&control_state);
+
                  // Enable/disable autorun.
                  
                  if(!control_state.follow)

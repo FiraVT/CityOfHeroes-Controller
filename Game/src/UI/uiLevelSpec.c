@@ -37,6 +37,8 @@
 #include "entity/classes.h"
 #include <utilitieslib/components/earray.h>
 #include "win/win_init.h"
+#include "win/gamepad.h"
+#include "UI/uiDialog.h"
 #include <utilitieslib/utils/timing.h>
 #include "clientcomm/clientcomm.h"
 #include "storyarc/contactCommon.h"
@@ -285,6 +287,17 @@ void drawPowerAndEnhancements( Character *pchar, Power * pow, int x, int y, int 
 // Main Loop //////////////////////////////////////////////////////////////////////////////////////////
 //-----------------------------------------------------------------------------------------------------
 static int init = FALSE;
+static int s_slotsAtStart;
+static int s_padFocusFrames;
+static int s_padFocusMoves;
+static int s_cancelNow;
+
+// The pad's Cancel asks first when slots are already placed, since it throws
+// them all away.
+static void specConfirmCancel(void *data)
+{
+	s_cancelNow = 1;
+}
 
 void specMenu()
 {
@@ -318,6 +331,10 @@ void specMenu()
     {
         init = TRUE;
         gNumEnhancesLeft = character_CountBuyBoostForLevel( e->pchar, e->pchar->iLevel);
+	s_slotsAtStart = gNumEnhancesLeft;
+	s_padFocusFrames = 20;
+	s_padFocusMoves = gamepadNavMoves();
+	s_cancelNow = 0;
         powerInfoSetLevel(e->pchar->iLevel);
         powerInfoSetClass(e->pchar->pclass);
     }
@@ -465,11 +482,34 @@ void specMenu()
 
     enhancementAnim_update(kPowerSystem_Powers);
 
+    // On the pad, start on the first power rather than the info button above
+    // it. The pad focuses a new screen's first button by itself a frame or two
+    // in, so this holds for a moment, until the D-pad moves.
+    if (s_padFocusFrames > 0) {
+	    s_padFocusFrames--;
+	    if (gamepadNavMoves() != s_padFocusMoves)
+		    s_padFocusFrames = 0;
+	    else if (gamepadConsoleUiEnabled())
+		    gamepadFocusPoint(
+			    (int)((FRAME_SPACE + FRAME_WIDTH / 2) *
+				  screenScaleX),
+			    (int)((SL_FRAME_TOP + 50 + 10) * screenScaleY));
+    }
+
     info_PowManagement(kPowInfo_SpecLevel, screenScaleX, screenScaleY );
 
     //if ( D_MOUSEHIT == drawStdButton( FRAME_SPACE + 50, 740, 10, 100, 40, CLR_DARK_RED, "CancelString", 2.f, 0) )
-    if ( drawNextButton( 40*screenScaleX,  740*screenScaleY, 10, screenScale, 0, 0, 0, "CancelString" ))
+    if ( drawNextButton( 40*screenScaleX,  740*screenScaleY, 10, screenScale, 0, 0, 0, "CancelString" ) && !s_cancelNow )
     {
+        if( gamepadConsoleUiEnabled() && gNumEnhancesLeft < s_slotsAtStart )
+            dialogStd( DIALOG_YES_NO, "Cancel and lose the slots you placed?", NULL, NULL, specConfirmCancel, NULL, 0 );
+        else
+            s_cancelNow = 1;
+    }
+
+    if ( s_cancelNow )
+    {
+        s_cancelNow = 0;
         enhancementAnim_clear();
         fadingText_clearAll();
         electric_clearAll();

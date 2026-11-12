@@ -1271,3 +1271,17 @@ void emailSetNewMessageStatus(int status, char *msg)
     if (!status)
         printf("Email not sent: %s\n", msg);
 }
+
+// The console HUD is not linked: uiNet.c asks it about screens that never open.
+int consoleInventionTableOpened(void)
+{
+	return 0;
+}
+void consoleInventionTableClosed(void)
+{
+	return;
+}
+int consoleNavShowsWindow(int window)
+{
+	return 0;
+}

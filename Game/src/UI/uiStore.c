@@ -17,6 +17,7 @@
 #include "UI/uiOptions.h"
 #include "uiSalvage.h"
 #include "sound/sound.h"
+#include "win/gamepad.h"
 
 #include "graphics/ttFont.h"
 #include "graphics/ttFontUtil.h"
@@ -75,6 +76,21 @@ static MultiStore s_MultiStore;
 
 static ContextMenu *s_menuSell = 0;
 static ContextMenu *s_menuBuy = 0;
+
+// A controller's quick Sell or Buy: the row under the pad's highlight is
+// selected and traded at once, without walking down to the button. Only a row
+// counts, so it never trades twice through the button.
+static int s_quickTrade;
+static int s_quickTradeRow;
+
+static int quickTradeHit(CBox *box)
+{
+	if (!s_quickTrade || !mouseCollision(box))
+		return 0;
+
+	s_quickTradeRow = 1;
+	return 1;
+}
 
 int isStoreOpen()
 {
@@ -528,7 +544,7 @@ static void store_drawPower( const BasePower * ppow, float x, float y, float z, 
         }
     }
 
-    if( bSelect || mouseClickHit( &box, MS_LEFT ))
+    if( bSelect || mouseClickHit( &box, MS_LEFT ) || quickTradeHit( &box ))
     {
         gSelectedItem.available = bAvailable;
         gSelectedItem.type = type;
@@ -611,7 +627,7 @@ static void store_drawEnhancement( const BasePower * ppow, float x, float y, flo
         }
     }
 
-    if( bSelect || mouseClickHit( &box, MS_LEFT ))
+    if( bSelect || mouseClickHit( &box, MS_LEFT ) || quickTradeHit( &box ))
     {
         gSelectedItem.available = bAvailable;
         gSelectedItem.selected = 1;
@@ -700,7 +716,7 @@ static void store_drawRecipe( const DetailRecipe *pRec, float x, float y, float 
         }
     }
 
-    if( bSelect || mouseClickHit( &box, MS_LEFT ))
+    if( bSelect || mouseClickHit( &box, MS_LEFT ) || quickTradeHit( &box ))
     {
         if (price > 0)
             gSelectedItem.available = 1;
@@ -793,7 +809,7 @@ void store_drawSalvage( const SalvageItem *pSal, float x, float y, float z, floa
         }
     }
 
-    if( bSelect || mouseClickHit( &box, MS_LEFT ))
+    if( bSelect || mouseClickHit( &box, MS_LEFT ) || quickTradeHit( &box ))
     {
         
         if (price > 0)
@@ -1251,6 +1267,9 @@ int storeWindow()
         return 0;
     }
 
+    s_quickTrade = gamepadTakeQuickTrade();
+    s_quickTradeRow = 0;
+
     drawFrame( PIX3, R10, x, y, z, wd, ht, scale, color, back_color );
     drawFrame( PIX3, R10, x, y, z+1, wd/2 - STORE_DIVIDE*scale, ht - STORE_FOOTER*scale, scale, color, 0 );
     drawFrame( PIX3, R10, x + wd/2 + STORE_DIVIDE*scale, y, z+1, wd/2 - STORE_DIVIDE*scale, ht - STORE_FOOTER*scale, scale, color, 0 );
@@ -1362,6 +1381,20 @@ int storeWindow()
         menu_BuyOrSell(NULL);
         sndPlay( "happy1", SOUND_GAME );
     }
+    else if( s_quickTrade && s_quickTradeRow )
+    {
+        // The same checks as the button: something you can afford and have room for.
+        if( !grey )
+        {
+            menu_BuyOrSell(NULL);
+            sndPlay( "happy1", SOUND_GAME );
+        }
+        else
+        {
+            sndPlay( "N_Error", SOUND_GAME );
+        }
+    }
+    s_quickTrade = 0;
 
     return 0;
 }

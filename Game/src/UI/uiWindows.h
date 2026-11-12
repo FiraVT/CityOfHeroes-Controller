@@ -29,6 +29,12 @@ int window_getDimsEx(int wdw, float *xp, float *yp, float *zp, float* wd, float 
 int window_getDims(int wdw, float *x, float *y, float *zp, float *wd, float *ht, float *scale, int * color, int * back_color);
 void window_setDims(int wdw, float  x, float  y, float width, float height);
 
+// Draws a window's contents inside a box another screen owns, such as the
+// console Navigation screen. While it draws, the window reports that box as its
+// own and says it is open, whatever its real state.
+void window_drawHosted(int wdw, float x, float y, float z, float wd, float ht,
+		       float scale, int color, int back_color);
+
 void window_permSetDims(int wdw);
 void window_UpdateServer(int wdw);
 void window_UpdateServerAllWindows();

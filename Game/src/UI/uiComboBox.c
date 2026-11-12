@@ -18,6 +18,7 @@
 #include "graphics/textureatlas.h"
 
 #include "cmdparse/cmdgame.h"
+#include "win/gamepad.h"
 #include <utilitieslib/components/earray.h>
 #include <utilitieslib/utils/mathutil.h>
 
@@ -214,12 +215,38 @@ void comboboxClear(ComboBox *cb)
 #define XSPACE 10
 //
 //
+// The drop down list last seen open, so a gamepad's B can shut it the way a
+// click outside does.
+static ComboBox *s_openCombo;
+
+static void noteOpenCombo(ComboBox *cb)
+{
+	if (cb->state)
+		s_openCombo = cb;
+	else if (s_openCombo == cb)
+		s_openCombo = NULL;
+}
+
+int combobox_closeOpen(void)
+{
+	if (!s_openCombo || !s_openCombo->state) {
+		s_openCombo = NULL;
+		return 0;
+	}
+
+	s_openCombo->state = 0;
+	s_openCombo = NULL;
+	return 1;
+}
+
 const char *combobox_display( ComboBox *cb )
 {
+    noteOpenCombo(cb);
     int i, count, unselectable_count = 0, max_count, frame_color, back_color;
     CBox box, box2;
     AtlasTex *arrow;
     const char * returnString = NULL;
+    float boxCenterX = 0, boxCenterY = 0;
     float tx, ty, tz, tht, twd, sc = 1.f;
     int window_color, closed = 0;
     UIBox uibox;
@@ -480,6 +507,8 @@ const char *combobox_display( ComboBox *cb )
     }
 
     BuildCBox( &box, tx, ty, twd*sc, tht*sc );
+    boxCenterX = tx + twd * sc / 2;
+    boxCenterY = ty + tht * sc / 2;
     if( !cb->unselectable )
     {
         int arrow_color;
@@ -643,6 +672,12 @@ const char *combobox_display( ComboBox *cb )
                         cb->state = 0;
                         cb->newlySelectedItem = 1;
 
+			// On the console HUD the pad's focus goes back to the
+			// box, not where the list was.
+			if (gamepadConsoleUiEnabled())
+				gamepadFocusPoint((int)boxCenterX,
+						  (int)boxCenterY);
+
                         if( cb->type == COMBOBOX )
                             returnString = cb->strings[i];
                     }
@@ -692,6 +727,7 @@ const char *combobox_display( ComboBox *cb )
 
 int combobox_displayRegister( ComboBox *cb, int radius, int color, int back_color, int text_color, char *defaultText, int locked, float screenScaleX, float screenScaleY, int xOffset, int yOffset )
 {
+    noteOpenCombo(cb);
     int i = 0, count;
      CBox box;
     AtlasTex *arrow = atlasLoadTexture( "chat_separator_arrow_down.tga" );
@@ -789,6 +825,7 @@ int combobox_displayRegister( ComboBox *cb, int radius, int color, int back_colo
 
 int combobox_displayHybridRegister( ComboBox *cb, int radius, int color, int back_color, int text_color )
 {
+    noteOpenCombo(cb);
     int i = 0, count;
     CBox box;
     AtlasTex *arrow = atlasLoadTexture( "chat_separator_arrow_down.tga" );

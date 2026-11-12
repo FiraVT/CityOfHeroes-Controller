@@ -120,6 +120,13 @@ void keybind_setPadModifiers(int mask);
  */
 void keybind_setPadModifiersHeld(int mask);
 
+/*
+ * The command bound to key code @key with modifier number @mod in the active
+ * keybind profiles, searched from the top of the profile stack the way a
+ * key press is. Returns NULL if nothing is bound. The string belongs to the
+ * profile and stays valid until that bind changes.
+ */
+const char *keybind_commandFor(int key, int mod);
 void ParseBindings();
 
 void keybinds_init( const char *profile, KeyBindProfile *kbp, KeyBind *kb );

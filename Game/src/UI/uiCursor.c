@@ -25,6 +25,7 @@
 #include "UI/uiGift.h"
 #include "UI/uiPet.h"
 #include "UI/uiDialog.h"
+#include "UI/uiCompass.h"
 
 #include "entity/powers.h"
 #include "entity/character_base.h"
@@ -36,6 +37,7 @@
 #include "UI/uiInspiration.h"
 #include "UI/uiContextMenu.h"
 #include "group/grouputil.h"    // for groupDefFindPropertyValue
+#include "group/group.h"
 #include <utilitieslib/components/earray.h>
 #include "player/pmotion.h"
 #include "storyarc/contactClient.h"
@@ -983,6 +985,272 @@ int critter_and_friend(Entity *target_ent, Entity *player)
         return 0;
 
     return !character_TargetIsFoe(player->pchar, target_ent->pchar);
+}
+
+static bool canInteractWithEntity(Entity *player, Entity *target)
+{
+	if (!target)
+		return false;
+
+	if (ENTTYPE(target) == ENTTYPE_MISSION_ITEM)
+		return closeEnoughToInteract(player, target, INTERACT_DISTANCE);
+
+	if (ENTTYPE(target) == ENTTYPE_NPC || ENTTYPE(target) == ENTTYPE_DOOR ||
+	    baseedit_IsClickableDetailEnt(target) ||
+	    critter_and_friend(target, player)) {
+		return distance3Squared(ENTPOS(player), ENTPOS(target)) <
+		       SQR(INTERACT_DISTANCE);
+	}
+
+	return false;
+}
+
+static void interactWithEntity(Entity *player, Entity *target)
+{
+	playerStopFollowMode();
+
+	if (ENTTYPE(target) == ENTTYPE_DOOR) {
+		enterDoorClient(ENTPOS(target), 0);
+	} else if (entity_TargetIsInVisionPhase(player, target)) {
+		START_INPUT_PACKET(pak, CLIENTINP_TOUCH_NPC);
+		pktSendBitsPack(pak, PKT_BITS_TO_REP_SVR_IDX, target->svr_idx);
+		END_INPUT_PACKET
+	}
+}
+
+static Entity *findNearestInteractable(Entity *player)
+{
+	Entity *best = NULL;
+	F32 bestDistance = SQR(INTERACT_DISTANCE);
+	int i;
+
+	if (canInteractWithEntity(player, current_target))
+		return current_target;
+
+	for (i = 1; i < entities_max; i++) {
+		Entity *candidate;
+		F32 distance;
+
+		if (!(entity_state[i] & ENTITY_IN_USE))
+			continue;
+
+		candidate = entities[i];
+
+		if (ENTTYPE(candidate) == ENTTYPE_CRITTER ||
+		    !canInteractWithEntity(player, candidate))
+			continue;
+
+		distance = distance3Squared(ENTPOS(player), ENTPOS(candidate));
+		if (distance <= bestDistance) {
+			best = candidate;
+			bestDistance = distance;
+		}
+	}
+
+	return best;
+}
+
+// Things in the map itself that a click uses: plaques, kiosks, invention
+// tables, and the places a mission asks to be visited. They are not entities,
+// so the interact button finds them in the map's groups. Only branches holding
+// properties are followed, and the list is read again every few seconds and on
+// a new map, as missions add and finish places to visit.
+typedef struct InteractSpot {
+	GroupDef *def;
+	// Only the tracker's entity is kept, since a map reload can free the
+	// tracker itself.
+	int entId;
+	// The group's own position. The server knows a place to visit by it and
+	// takes only that exact point, as a click sends, and both sides measure
+	// reach to it.
+	Vec3 origin;
+} InteractSpot;
+
+static InteractSpot *interactSpots;
+static int interactSpotCount, interactSpotMax;
+static U32 interactSpotsRead;
+static char interactSpotsWorld[MAX_PATH];
+
+// Doors are left to door entities and to where the camera points, as a stray
+// press must not leave the map.
+static int interactSpotKind(GroupDef *def)
+{
+	if (groupDefFindPropertyValue(def, "Door"))
+		return 0;
+	return isInteractLocation(def) ||
+	       groupDefFindPropertyValue(def, "VisitLocation") != NULL;
+}
+
+static int collectInteractSpot(DefTracker *tracker)
+{
+	GroupDef *def = tracker->def;
+
+	if (!def)
+		return 0;
+
+	if (def->has_properties && interactSpotKind(def)) {
+		InteractSpot *spot = dynArrayAddStruct(
+			&interactSpots, &interactSpotCount, &interactSpotMax);
+
+		spot->def = def;
+		spot->entId = tracker->ent_id;
+		copyVec3(tracker->mat[3], spot->origin);
+		return 0;
+	}
+	return def->child_properties;
+}
+
+static void readInteractSpots(void)
+{
+	U32 now = timerCpuSeconds();
+
+	if (interactSpotsRead && now - interactSpotsRead < 3 &&
+	    !stricmp(interactSpotsWorld, game_state.world_name))
+		return;
+
+	interactSpotsRead = now ? now : 1;
+	strncpy(interactSpotsWorld, game_state.world_name,
+		sizeof(interactSpotsWorld) - 1);
+	interactSpotsWorld[sizeof(interactSpotsWorld) - 1] = 0;
+	interactSpotCount = 0;
+	groupProcessDefTracker(&group_info, collectInteractSpot);
+}
+
+static int visitLocationWanted(GroupDef *def)
+{
+	char *groupName = groupDefFindPropertyValue(def, "VisitLocation");
+	int i;
+
+	for (i = eaSize(&visitLocations) - 1; groupName && i >= 0; i--) {
+		if (stricmp(visitLocations[i], groupName) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+// The nearest of them in reach, leaving out places to visit that no mission
+// wants. A place a mission wants comes before anything else in reach, since a
+// lab or office often has several plaques side by side.
+static InteractSpot *findNearestInteractSpot(Entity *player)
+{
+	InteractSpot *best = NULL;
+	F32 bestDistance = SQR(INTERACT_DISTANCE);
+	int bestWanted = 0;
+	int i;
+
+	readInteractSpots();
+	for (i = 0; i < interactSpotCount; i++) {
+		F32 distance = distance3Squared(ENTPOS(player),
+						interactSpots[i].origin);
+		int wanted;
+
+		if (distance >= SQR(INTERACT_DISTANCE) ||
+		    visitLocationIgnored(interactSpots[i].def))
+			continue;
+
+		wanted = visitLocationWanted(interactSpots[i].def);
+		if (wanted > bestWanted ||
+		    (wanted == bestWanted && distance < bestDistance)) {
+			best = &interactSpots[i];
+			bestDistance = distance;
+			bestWanted = wanted;
+		}
+	}
+	return best;
+}
+
+// What the interact button would do right now, for the on-screen prompt.
+const char *interactPromptVerb(void)
+{
+	Entity *player = playerPtr();
+	Entity *target;
+	InteractSpot *spot;
+
+	if (!player || entMode(player, ENT_DEAD) || game_state.pendingTSMapXfer)
+		return NULL;
+
+	target = findNearestInteractable(player);
+	if (!target && (spot = findNearestInteractSpot(player)) != NULL)
+		return groupDefFindPropertyValue(spot->def, "Plaque") ? "Read"
+								      : "Use";
+	if (!target)
+		return compass_MissionExitAvailable() ? "Exit Mission" : NULL;
+
+	if (ENTTYPE(target) == ENTTYPE_DOOR)
+		return "Enter";
+	if (ENTTYPE(target) == ENTTYPE_MISSION_ITEM)
+		return "Use";
+	return "Talk";
+}
+
+// Does what clicking would do for the nearest thing in reach, without needing
+// the cursor over it. The current target wins when it is in reach. Friendly
+// critters count only as a target, so that pets standing beside a contact
+// cannot take the interaction.
+void interactWithNearest(void)
+{
+	static const F32 screenHeights[] = { 0.5f, 0.65f, 0.8f };
+	Entity *player = playerPtr();
+	Entity *best;
+	int width = 0, height = 0;
+	int i;
+
+	if (!player || entMode(player, ENT_DEAD) || game_state.pendingTSMapXfer)
+		return;
+
+	best = findNearestInteractable(player);
+
+	if (best) {
+		interactWithEntity(player, best);
+		return;
+	}
+
+	{
+		InteractSpot *spot = findNearestInteractSpot(player);
+
+		if (spot) {
+			DefTracker tracker = { 0 };
+
+			tracker.ent_id = spot->entId;
+			interactWithInterestingGroupDef(player, spot->def,
+							spot->origin, &tracker);
+			return;
+		}
+	}
+
+	// Doors and kiosks are often world geometry rather than entities, so
+	// look where the camera points.
+	windowClientSize(&width, &height);
+
+	for (i = 0; i < ARRAY_SIZE(screenHeights); i++) {
+		ItemSelect item = { 0 };
+		Vec3 end;
+		Mat4 matWorld;
+		bool hitWorld = false;
+
+		cursorFind(width / 2, (int)(height * screenHeights[i]), 200,
+			   &item, end, matWorld, &hitWorld, INTERACT_DISTANCE,
+			   NULL);
+
+		if (item.ent_id > 0 &&
+		    canInteractWithEntity(player, entFromId(item.ent_id))) {
+			interactWithEntity(player, entFromId(item.ent_id));
+			return;
+		}
+
+		if (item.def && isInteractLocation(item.def)) {
+			interactWithInterestingGroupDef(
+				player, item.def, item.mat[3], item.tracker);
+			return;
+		}
+	}
+
+	// Nothing to use, and the mission is done: leave it, as the compass's
+	// exit button does.
+	if (compass_MissionExitAvailable()) {
+		char exitMission[] = "requestexitmission 0";
+		cmdParse(exitMission);
+	}
 }
 
 void handleMouseOverEntity( int mousedOverEnt, Entity * player )

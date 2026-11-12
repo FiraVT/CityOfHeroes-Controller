@@ -57,6 +57,10 @@ int mouseUpHit    ( CBox *box, int button );
 int mouseClickHit( CBox *box, int button );
 int mouseDoubleClickHit( CBox *box, int button );
 int mouseCollision( CBox *box );
+// mouseCollision without offering the box to the gamepad, for each word of a
+// block of text.
+void boxScreenCenter(const CBox *box, int *x, int *y);
+int mouseCollisionQuiet(CBox *box);
 
 int mouseDownHitNoCol( int button );
 int mouseUpHitNoCol( int button );

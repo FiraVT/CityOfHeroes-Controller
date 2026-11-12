@@ -89,6 +89,8 @@
 #endif
 #include "sound/sound.h"
 #include "graphics/FX/fx.h"
+#include "win/gamepadNav.h"
+#include "win/gamepad.h"
 
 
 static void init_map_options();
@@ -129,6 +131,19 @@ Destination thumbtack = {0};
 
 Destination activeIcons[MAX_ACTIVE_ICONS] = {0};
 int activeIconCount = 0;
+
+// What the last drawn map needs for gamepad control: see automapPadPan and the
+// others below mapWindow.
+static float s_padMinZoom;
+static float s_padCenterX, s_padCenterY;
+static float s_padPlayerX, s_padPlayerY;
+static int s_padPlayerSeen;
+static int s_padSwitchView;
+// Set once the pad has moved or zoomed the map, so the map stops recentring on
+// every small step the player takes; cleared when the map tab opens, which also
+// centres it on the player again.
+static int s_padMoved;
+static int s_padRecenter;
 
 char minimap_scenefile[sizeof (group_info.scenefile)];
 
@@ -2207,6 +2222,13 @@ int drawIcons( Destination *icons, int iconcount, int mapWidth, int mapHeight, f
         if ( icons[i].type == ICON_PLAYER )
         {
             AtlasTex * dot = atlasLoadTexture("map_enticon_you_a");
+
+            if (&icons[i] == &activeIcons[0])
+            {
+                s_padPlayerX = x + icons[i].icon->width*szoom/2;
+                s_padPlayerY = y + icons[i].icon->height*szoom/2;
+                s_padPlayerSeen = 1;
+            }
             z += 4;
             display_rotated_sprite( dot, x + (icons[i].icon->width - dot->width)/2,
                 y + (icons[i].icon->height - dot->height)/2, z+5, szoom, szoom, CLR_WHITE, icons[i].angle, 0 );
@@ -2379,6 +2401,27 @@ void mapUnavailable()
     cprntEx( x + wd/2, y + ht/2, z+10, sc, sc, (CENTER_X|CENTER_Y), "MapUnavailable" );
 }
 
+// Development aid for /gamepad_debug: a line in gamepad_debug.log naming each
+// step of drawMap that moves the map, with the position before and after.
+#define MAP_TRACE_START()                                                      \
+	float traceX = (float)mapState->xp, traceY = (float)mapState->yp
+#define MAP_TRACE(step)                                                        \
+	do {                                                                   \
+		if (fabsf(mapState->xp - traceX) > 0.5f ||                     \
+		    fabsf(mapState->yp - traceY) > 0.5f) {                     \
+			char traceLine[160];                                   \
+			snprintf(traceLine, sizeof(traceLine),                 \
+				 "map moved by %s: %.0f,%.0f to %.0f,%.0f "    \
+				 "zoom %.3f",                                  \
+				 step, traceX, traceY, (double)mapState->xp,   \
+				 (double)mapState->yp,                         \
+				 (double)mapState->zoom);                      \
+			gamepadDebugNote(traceLine);                           \
+		}                                                              \
+		traceX = (float)mapState->xp;                                  \
+		traceY = (float)mapState->yp;                                  \
+	} while (0)
+
 void drawMap( char * map_name, int type )
 {
     float wx, wy, wz, wsc, winwd, winht, wd, ht, wxs, wys, scale;
@@ -2472,13 +2515,17 @@ void drawMap( char * map_name, int type )
     wys = ht / DEFAULT_MAP_Y;
     scale = MAX( wxs, wys );
 
+    MAP_TRACE_START();
     mapState->xp -= lastx - wx;  // location
     mapState->yp -= lasty - wy;
+    MAP_TRACE("window moved");
 
     // if first time open, center map on player
     //------------------------------------------------------------------------------------
-    if( last_player_x != (int)activeIcons[0].world_location[3][0] || last_player_y != (int)activeIcons[0].world_location[3][2] || type != last_type  )
+    if( s_padRecenter || type != last_type ||
+        (!s_padMoved && (last_player_x != (int)activeIcons[0].world_location[3][0] || last_player_y != (int)activeIcons[0].world_location[3][2])) )
     {
+        s_padRecenter = 0;
         if( type == MAP_MISSION_MAP || type == MAP_BASE )
         {
             mapState->xp = (wx + (winwd/2))- (((mapState->width)*mapState->zoom) - activeIcons[0].map_location[0]*((mapState->width)*mapState->zoom));
@@ -2491,6 +2538,7 @@ void drawMap( char * map_name, int type )
         }
     }
 
+    MAP_TRACE("centred on player");
     last_player_x = activeIcons[0].world_location[3][0];
     last_player_y = activeIcons[0].world_location[3][2];
     last_type = type;
@@ -2521,11 +2569,21 @@ void drawMap( char * map_name, int type )
 
         // the slider function takes a normalized number
         minZoom = MIN( xzoom, yzoom );
+        s_padMinZoom = minZoom;
+        s_padCenterX = wx + winwd/2;
+        s_padCenterY = wy + winht/2;
         normalizedZoom = (( mapState->zoom - minZoom )/( MAX_MAP_ZOOM - minZoom ))*2 - 1;
 
 
         if( wsc > .15f )
+        {
+            // The pad zooms with the triggers, so the D-pad passes the slider by.
+            int navWindow = gamepadNavGetWindow();
+
+            gamepadNavSetWindow(NAV_IGNORED);
             sliderZoom = doVerticalSlider( wx + winwd - PIX3/2, wy + winht/2, wz + 4, winht/2, 1.f, 1.f, normalizedZoom, SLIDER_MAP_SCALE, color );
+            gamepadNavSetWindow(navWindow);
+        }
         else
             sliderZoom = 0;
 
@@ -2545,6 +2603,7 @@ void drawMap( char * map_name, int type )
         }
     }
 
+    MAP_TRACE("zoom slider");
     // pan
     BuildCBox( &box, wx + (winwd - wd)/2, wy + (winht - ht)/2, wd, ht );
 
@@ -2575,6 +2634,7 @@ void drawMap( char * map_name, int type )
         }
     }
 
+    MAP_TRACE("mouse drag");
     // re-size
     if ( !resizing && winDefs[WDW_MAP].drag_mode )
     {
@@ -2624,6 +2684,7 @@ void drawMap( char * map_name, int type )
         mapState->yp = (wy + winht - BORDER_DIM - mapHeight);
 
 
+    MAP_TRACE("kept inside the window");
     // check to see if we are letter boxing, if so center
     // we should never be able to have letterboxing on both axis
     if( mapWidth < wd )
@@ -2631,6 +2692,7 @@ void drawMap( char * map_name, int type )
     if( mapHeight < ht )
         mapState->yp = ( wy + winht/2 - mapHeight/2 );
 
+    MAP_TRACE("letterboxed");
     font( &game_12 );
     font_color( CLR_WHITE, CLR_WHITE );
 
@@ -3356,7 +3418,14 @@ int mapWindow()
         }
     }
     inmission = (game_state.mission_map || game_state.alwaysMission);
-    if (s_newMap) 
+
+    if (s_padSwitchView)
+    {
+        s_padSwitchView = 0;
+        uiTabControlSelect(tc, (int *)(intptr_t)(gSelectedTab ? 0 : 1));
+    }
+
+    if (s_newMap)
     {
         init_map_options();
         if (inmission) 
@@ -3391,6 +3460,73 @@ int mapWindow()
          helpButton( &pHelp, x + 20*scale, y + ht - 20*scale, z, scale, "MMShowSpawnKey", 0 );
     }
     return 0;
+}
+
+void automapPadPan(float dx, float dy)
+{
+	MapState *mapState = minimap_getMapState();
+
+	// The map's place is kept in whole pixels, so the part of a pixel a
+	// slow push gives each frame is carried to the next. drawMap keeps the
+	// map inside its window, so this needs no limits of its own.
+	static float carryX, carryY;
+	int stepX, stepY;
+
+	s_padMoved = 1;
+	carryX += dx;
+	carryY += dy;
+	stepX = (int)carryX;
+	stepY = (int)carryY;
+	carryX -= stepX;
+	carryY -= stepY;
+	mapState->xp += stepX;
+	mapState->yp += stepY;
+}
+
+void automapPadZoom(float factor)
+{
+	MapState *mapState = minimap_getMapState();
+	float oldZoom = mapState->zoom;
+	float newZoom = oldZoom * factor;
+	float ratioX, ratioY;
+
+	if (oldZoom <= 0)
+		return;
+	s_padMoved = 1;
+
+	if (newZoom > MAX_MAP_ZOOM)
+		newZoom = MAX_MAP_ZOOM;
+	if (newZoom < s_padMinZoom)
+		newZoom = s_padMinZoom;
+
+	// The point in the middle of the window stays put, as the zoom slider
+	// does it.
+	ratioX = (s_padCenterX - mapState->xp) / oldZoom;
+	ratioY = (s_padCenterY - mapState->yp) / oldZoom;
+	mapState->zoom = newZoom;
+	mapState->xp = s_padCenterX - ratioX * newZoom;
+	mapState->yp = s_padCenterY - ratioY * newZoom;
+}
+
+void automapPadStart(void)
+{
+	s_padMoved = 0;
+	s_padRecenter = 1;
+}
+
+void automapPadSwitchView(void)
+{
+	s_padSwitchView = 1;
+}
+
+int automapPadPlayerPos(float *x, float *y)
+{
+	if (!s_padPlayerSeen)
+		return 0;
+
+	*x = s_padPlayerX;
+	*y = s_padPlayerY;
+	return 1;
 }
 
 //////////////////////////////////////////////////////////////

@@ -16,6 +16,8 @@
 #include "win/input.h"
 #include "UI/uiBaseInput.h"
 #include "UI/uiOptions.h"
+#include "win/gamepadNav.h"
+#include <utilitieslib/utils/Cbox.h>
 
 mouse_input gMouseInpBuf[MOUSE_INPUT_SIZE] = { 0 };
 mouse_input gMouseInpCur  = {0};
@@ -36,6 +38,52 @@ static float cursor_repeat_times_slow[] =
 {
     20, 35, 45, 52, 57, 60
 };
+
+// Tells D-pad navigation about a box the UI is hit testing. Boxes are in UI
+// space on the front end menus and in client pixels in the game, the same split
+// scaled_point_cbox_clsn makes. Where a box's middle is in client pixels, as
+// the pad's navigation sees it.
+void boxScreenCenter(const CBox *box, int *x, int *y)
+{
+	F32 cx = (box->left + box->right) / 2;
+	F32 cy = (box->top + box->bottom) / 2;
+
+	if (shell_menu()) {
+		F32 xsc, ysc, xOffset, yOffset;
+
+		calc_scrn_scaling_with_offset(&xsc, &ysc, &xOffset, &yOffset);
+		cx = cx * xsc + xOffset;
+		cy = cy * ysc + yOffset;
+	}
+	*x = (int)cx;
+	*y = (int)cy;
+}
+
+static void reportBoxToNavigation(CBox *box, int blocked)
+{
+	NavRect ui, screen;
+
+	ui.left = box->left;
+	ui.top = box->top;
+	ui.right = box->right;
+	ui.bottom = box->bottom;
+	screen = ui;
+
+	if (outside_scissor((ui.left + ui.right) / 2, (ui.top + ui.bottom) / 2))
+		return;
+
+	if (shell_menu()) {
+		F32 xsc, ysc, xOffset, yOffset;
+
+		calc_scrn_scaling_with_offset(&xsc, &ysc, &xOffset, &yOffset);
+		screen.left = ui.left * xsc + xOffset;
+		screen.right = ui.right * xsc + xOffset;
+		screen.top = ui.top * ysc + yOffset;
+		screen.bottom = ui.bottom * ysc + yOffset;
+	}
+
+	gamepadNavAddBox(&ui, &screen, blocked);
+}
 
 int mouseDragging()
 {
@@ -215,7 +263,13 @@ int mouseDownHit( CBox *box, int button )
 {
      int i;
 
-    if( entDebugMenuVisible() || control_state.canlook || collisions_off_for_rest_of_frame || mouseDragging() )
+    if( entDebugMenuVisible() || control_state.canlook || mouseDragging() )
+        return FALSE;
+
+    // Collisions turned off for the rest of the frame still leave the box
+    // a gamepad focus target; see reportBoxToNavigation().
+    reportBoxToNavigation( box, collisions_off_for_rest_of_frame );
+    if( collisions_off_for_rest_of_frame )
         return FALSE;
 
      for ( i = 0; i < gInpBufferSize; i++ )
@@ -262,7 +316,13 @@ int mouseClickHit( CBox *box, int button )
 {
     int i;
 
-    if( entDebugMenuVisible() || collisions_off_for_rest_of_frame || mouseDragging() )
+    if( entDebugMenuVisible() || mouseDragging() )
+        return FALSE;
+
+    // Collisions turned off for the rest of the frame still leave the box
+    // a gamepad focus target; see reportBoxToNavigation().
+    reportBoxToNavigation( box, collisions_off_for_rest_of_frame );
+    if( collisions_off_for_rest_of_frame )
         return FALSE;
 
     for ( i = 0; i < gInpBufferSize; i++ )
@@ -306,12 +366,20 @@ int mouseDoubleClickHit( CBox *box, int button )
 
 // returns true if the mouse did collide
 //
-int mouseCollision( CBox * box )
+static int mouseCollisionEx(CBox *box, int forNavigation)
 {
     float xp, yp;
 
       if( entDebugMenuVisible() || control_state.canlook ||
-            collisions_off_for_rest_of_frame || gWindowDragging || gScrollBarDragging )
+            gWindowDragging || gScrollBarDragging )
+        return FALSE;
+
+    // A control under the mouse, such as a help button, can turn collisions
+    // off for the rest of the frame. The mouse cannot hit what follows, but
+    // the gamepad's D-pad must still be able to reach it.
+    if( forNavigation )
+        reportBoxToNavigation( box, collisions_off_for_rest_of_frame );
+    if( collisions_off_for_rest_of_frame )
         return FALSE;
 
        xp = gMouseInpCur.x;
@@ -324,6 +392,18 @@ int mouseCollision( CBox * box )
     //    return TRUE;
 
     return FALSE;
+}
+
+int mouseCollision(CBox *box)
+{
+	return mouseCollisionEx(box, 1);
+}
+
+// The same, for a box the gamepad should not stop on, such as each word of a
+// block of text.
+int mouseCollisionQuiet(CBox *box)
+{
+	return mouseCollisionEx(box, 0);
 }
 
 // returns true if the mouse button was pressed

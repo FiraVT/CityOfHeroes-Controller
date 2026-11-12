@@ -32,7 +32,12 @@ int statusGetEmblemWidth();
 F32 getHeartBeatIntensity(float health_percentage, bool reset);
 
 void drawHealthBar( float x, float y, float z, float width, float curr, float total, float scale, int frameColor, int barColor, int type );
+void drawHealthBarStill(float x, float y, float z, float width, float curr,
+			float total, float scale, int frameColor, int barColor,
+			int type);
 int getHealthColor(bool inPhase, float percentage);
+void status_drawConsoleFrame(float x, float y, float z, float wd, float scale,
+			     int color, int bcolor);
 int getAbsorbColor(float percentage);
 int statusWindow();
 

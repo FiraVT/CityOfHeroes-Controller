@@ -2,6 +2,7 @@
 #include <utilitieslib/utils/wininclude.h>
 #include "graphics/font.h" // temporary
 #include "win/input.h"
+#include "win/gamepad.h"
 #include "win/gamepadDevice.h"
 #include "win/win_init.h"
 #include <ctype.h>
@@ -256,6 +257,7 @@ fail:
  
 void InputShutdown()
 {
+    gamepadShutdown();
     KeyboardShutdown();
     MouseShutdown();
     JoystickShutdown();
@@ -593,22 +595,22 @@ static void inpGamepadStick(S16 x, S16 y, int up, int down, int left, int right,
 	inpGamepadKey(down, y > GAMEPAD_KEY_THRESHOLD, curTime);
 }
 
-void inpJoystickState()
+/*
+ * Press and release the plain joystick keys from @pad. A zeroed @pad
+ * releases them all.
+ */
+static void inpJoystickKeys(const PadState *pad_in)
 {
 	const S32 curTime = timeGetTime();
-	PadState pad;
+	PadState copy = *pad_in;
+	PadState *pad = &copy;
 	int i;
-
-	if (!joystick_started)
-		return;
-
-	gamepadDeviceRead(&pad);
 
 	/* Release everything when the pad goes away; all fields are 0. */
 	for (i = 0; i < PAD_BUTTON_COUNT; i++)
-		inpGamepadKey(gamepadButtonKeys[i], pad.buttons[i], curTime);
+		inpGamepadKey(gamepadButtonKeys[i], pad->buttons[i], curTime);
 
-	inpGamepadStick(pad.axes[PAD_AXIS_LEFTX], pad.axes[PAD_AXIS_LEFTY],
+	inpGamepadStick(pad->axes[PAD_AXIS_LEFTX], pad->axes[PAD_AXIS_LEFTY],
 			INP_JOYSTICK1_UP, INP_JOYSTICK1_DOWN,
 			INP_JOYSTICK1_LEFT, INP_JOYSTICK1_RIGHT, curTime);
 
@@ -617,19 +619,57 @@ void inpJoystickState()
 	 * JOYSTICK3, and the shipped Joystick keybind profile turns with
 	 * joystick3. The right stick drives both so those binds still work.
 	 */
-	inpGamepadStick(pad.axes[PAD_AXIS_RIGHTX], pad.axes[PAD_AXIS_RIGHTY],
+	inpGamepadStick(pad->axes[PAD_AXIS_RIGHTX], pad->axes[PAD_AXIS_RIGHTY],
 			INP_JOYSTICK2_UP, INP_JOYSTICK2_DOWN,
 			INP_JOYSTICK2_LEFT, INP_JOYSTICK2_RIGHT, curTime);
-	inpGamepadStick(pad.axes[PAD_AXIS_RIGHTX], pad.axes[PAD_AXIS_RIGHTY],
+	inpGamepadStick(pad->axes[PAD_AXIS_RIGHTX], pad->axes[PAD_AXIS_RIGHTY],
 			INP_JOYSTICK3_UP, INP_JOYSTICK3_DOWN,
 			INP_JOYSTICK3_LEFT, INP_JOYSTICK3_RIGHT, curTime);
 
 	inpGamepadKey(INP_LTRIGGER,
-		      pad.axes[PAD_AXIS_LTRIGGER] > GAMEPAD_KEY_THRESHOLD,
+		      pad->axes[PAD_AXIS_LTRIGGER] > GAMEPAD_KEY_THRESHOLD,
 		      curTime);
 	inpGamepadKey(INP_RTRIGGER,
-		      pad.axes[PAD_AXIS_RTRIGGER] > GAMEPAD_KEY_THRESHOLD,
+		      pad->axes[PAD_AXIS_RTRIGGER] > GAMEPAD_KEY_THRESHOLD,
 		      curTime);
+}
+
+/*
+ * The pad as plain joystick keys, for keybind profiles that bind JOY1,
+ * JOYSTICK1_UP and the like. Used while gamepad controls are off.
+ */
+static void inpJoystickState(void)
+{
+	PadState pad;
+
+	if (!joystick_started)
+		return;
+
+	gamepadDeviceRead(&pad);
+	inpJoystickKeys(&pad);
+}
+
+/*
+ * Read the pad once per frame, through the gamepad controls when they are
+ * on (win/gamepad.c), otherwise as plain joystick keys. Switching lets go
+ * of the plain keys so none stays held.
+ */
+static void inpGamepadUpdate(void)
+{
+	static int controls_were_on;
+	int controls_on = joystick_started && gamepadEnabled();
+
+	if (controls_on && !controls_were_on) {
+		PadState released = { 0 };
+
+		inpJoystickKeys(&released);
+	}
+	controls_were_on = controls_on;
+
+	if (controls_on)
+		gamepadUpdate();
+	else
+		inpJoystickState();
 }
 
 
@@ -700,6 +740,33 @@ int mmbdrag = 0;
 
 #define CLICK_TIME 250
 #define CLICK_SIZE  16
+
+// A mouse separates a click from a drag by hand movement and a short press. A
+// gamepad button is pressed more slowly and the cursor is often at rest, so for
+// the gamepad only moving the cursor makes a drag, however long the button is
+// held. Index 0 is left and 1 is right.
+static struct {
+	int held;
+	int moved;
+	int downX;
+	int downY;
+} gamepadMouseHold[2];
+
+static int gamepadMouseHoldIsStill(int rightButton)
+{
+	int x = 0, y = 0;
+
+	if (!gamepadMouseHold[rightButton].held)
+		return 0;
+
+	inpMousePos(&x, &y);
+
+	if (ABS(x - gamepadMouseHold[rightButton].downX) > CLICK_SIZE ||
+	    ABS(y - gamepadMouseHold[rightButton].downY) > CLICK_SIZE)
+		gamepadMouseHold[rightButton].moved = 1;
+
+	return !gamepadMouseHold[rightButton].moved;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 // SubFunctions for handling mouse clicks
@@ -1164,7 +1231,7 @@ void inpReadMouse( void )
     {
          // allow a mouse movement of up to 20 pixels on each axis,
         // and a time difference of 400 ms
-        if ( ABS( (int)lmbtime - (int)GetTickCount() ) > CLICK_TIME )
+        if ( ABS( (int)lmbtime - (int)GetTickCount() ) > CLICK_TIME && !gamepadMouseHoldIsStill(0) )
         {
             gMouseInpBuf[gInpBufferSize].left = MS_DRAG;
             gMouseInpBuf[gInpBufferSize].x = lmbdownx;
@@ -1177,7 +1244,7 @@ void inpReadMouse( void )
     {
         // allow a mouse movement of up to 20 pixels on each axis,
         // and a time difference of 400 ms
-        if ( ABS( (int)rmbtime - (int)GetTickCount() ) > CLICK_TIME )
+        if ( ABS( (int)rmbtime - (int)GetTickCount() ) > CLICK_TIME && !gamepadMouseHoldIsStill(1) )
         {
             gMouseInpBuf[gInpBufferSize].right = MS_DRAG;
             gMouseInpBuf[gInpBufferSize].x = rmbdownx;
@@ -1226,6 +1293,84 @@ void inpReadMouse( void )
 }
 
 // use to prevent joysticks from executing commands if sitting in idle state
+// Presses or releases a mouse button on behalf of the gamepad cursor. Runs the
+// same handlers as the hardware read so every window sees an ordinary mouse
+// event. Call after inpReadMouse().
+void inpGamepadMouseButton(int rightButton, int down)
+{
+	DIDEVICEOBJECTDATA didod = { 0 };
+	const DWORD now = timeGetTime();
+	int x = 0, y = 0;
+
+	didod.dwData = down ? 0x80 : 0;
+	didod.dwTimeStamp = now;
+
+	inpMousePos(&x, &y);
+	gMouseInpCur.x = x;
+	gMouseInpCur.y = y;
+
+	if (down) {
+		gamepadMouseHold[rightButton].held = 1;
+		gamepadMouseHold[rightButton].moved = 0;
+		gamepadMouseHold[rightButton].downX = x;
+		gamepadMouseHold[rightButton].downY = y;
+	} else {
+		// A still press is a click however long it lasted, so hand the
+		// click test the press time. A press that moved was a drag, and
+		// must not click where it started.
+		const int still = gamepadMouseHoldIsStill(rightButton);
+
+		if (rightButton) {
+			if (still)
+				didod.dwTimeStamp = rmbtime;
+			else
+				rmbstate = MS_NONE;
+		} else {
+			if (still)
+				didod.dwTimeStamp = lmbtime;
+			else
+				lmbstate = MS_NONE;
+		}
+
+		gamepadMouseHold[rightButton].held = 0;
+	}
+
+	if (rightButton) {
+		inpMouseRightClick(&didod);
+		inpUpdateKey(INP_RBUTTON, didod.dwData, now);
+	} else {
+		inpMouseLeftClick(&didod);
+		inpUpdateKey(INP_LBUTTON, didod.dwData, now);
+	}
+}
+
+// One notch of the mouse wheel on behalf of the gamepad. Negative z scrolls
+// down.
+void inpGamepadScroll(int down)
+{
+	gMouseInpCur.z += down ? -1 : 1;
+}
+
+// Sends a keyboard edit key, such as backspace or enter, to whichever text
+// field has focus.
+void inpGamepadEditKey(int key)
+{
+	inpKeyAddBuf(KIT_EditKey, key, 0, KIA_NONE);
+}
+
+// A key press seen by inpEdge this frame, for screens that read keys directly,
+// like Enter for Next.
+void inpGamepadKeyEdge(int key)
+{
+	if (key >= 0 && key < ARRAY_SIZE(inp_edges))
+		inp_edges[key] = 1;
+}
+
+void inpGamepadTypeCharacter(char c)
+{
+	inpKeyAddBuf(KIT_Ascii, c, 0, KIA_NONE);
+}
+
 static void inpUpdateKeyClearIfActive(int keyIndex, int timeStamp)
 {
     if(inp_levels[keyIndex])
@@ -1332,6 +1477,7 @@ static DWORD lastInpTime = 0;
         GetCursorPos(&point);
         mouse_oldx = point.x;
         mouse_oldy = point.y;
+	gamepadFocusLost();
         inpClear();
         return;
     }
@@ -1371,7 +1517,7 @@ static DWORD lastInpTime = 0;
 
     inpReadMouse();
     inpKeyboardUpdate();
-    inpJoystickState();
+    inpGamepadUpdate();
 
     GetCursorPos(&point);
      mouse_lastx = point.x;

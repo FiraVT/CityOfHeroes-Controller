@@ -1,5 +1,7 @@
 
 #include <utilitieslib/utils/utils.h>    // for strstri
+#include "win/gamepad.h"
+#include "UI/uiDialog.h"
 #include <utilitieslib/components/earray.h>
 #include "player/player.h"
 #include "cmdparse/cmdgame.h"
@@ -673,6 +675,11 @@ static float tailorTotalXPositions[13][3] =
 static SGColorBits sgColorsU[NUM_SG_COLOR_SLOTS + 1][6];
 static unsigned int currentCostumeColors[MAX_COSTUME_PARTS][4];
 static int s_anyChanges;
+
+static void tailor_confirmLeave(void *data)
+{
+	tailor_exit(0);
+}
 static int hasDiscountSalvage;
 
 int tailor_drawTotal( Entity *e, int genderChange, float screenScaleX, float screenScaleY )
@@ -1429,7 +1436,11 @@ void tailorMenuEx(int sgMode)
         {
             if (!bodyCanBeEdited(0))
             {
-                tailor_exit(0);
+                // On the console HUD a stray B is the Back arrow, so it asks before throwing work away.
+                if (gamepadConsoleUiEnabled() && s_anyChanges)
+                    dialogStd( DIALOG_YES_NO, "Leave the tailor and lose your changes?", NULL, NULL, tailor_confirmLeave, NULL, 0 );
+                else
+                    tailor_exit(0);
             }
         }
         if (tailor_hasStoreCostumeParts())

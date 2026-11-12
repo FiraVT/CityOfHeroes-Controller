@@ -55,6 +55,10 @@ void trayInfo_GenericContext( CBox *box, TrayObj * to);
 void trayslot_select(Entity *e, TrayCategory trayCategory, int trayNumber, int slotNumber);
 bool trayslot_istype( Entity *e, int slot_num, int tray_num, TrayItemType type);
 void trayslot_drawIcon( TrayObj * ts, float xp, float yp, float zp, float scale, int inventory );
+TrayObj *trayslot_GetCurrent(Entity *e, CurTrayType tray, int slot);
+void trayslot_DisplayBare(Entity *e, CurTrayType tray, int slot, float x,
+			  float y, float z, float size, int color, int canFire);
+int trayslot_Place(Entity *e, CurTrayType tray, int slot, TrayObj *obj);
 
 TrayObj *trayslot_find( Entity *e, const char *pch );
 void trayslot_findAndSelect( Entity *e, const char *pch, int toggleonoff );

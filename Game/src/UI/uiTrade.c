@@ -1,6 +1,7 @@
 
 #include "UI/uiTrade.h"
 #include "UI/uiNet.h"
+#include "UI/uiConsoleHud.h"
 #include "UI/uiChat.h"
 #include "UI/uiUtil.h"
 #include "UI/uiUtilGame.h"
@@ -1400,6 +1401,13 @@ int tradeWindow()
     if( !partner )
         sendTradeCancel( TRADE_FAIL_OTHER_LEFT );
 
+    // The console HUD draws its own trade screen; the checks above still run
+    // here.
+    if (consoleHudHidesWindow(WDW_TRADE)) {
+	    uiEditReturnFocus(sInfEdit);
+	    return 0;
+    }
+
     if( !init )
     {
         gTradeContext = contextMenu_Create( NULL );
@@ -1462,5 +1470,40 @@ int tradeWindow()
     return 0;
 }
 
+//-----------------------------------------------------------------------------
+// Console HUD ////////////////////////////////////////////////////////////////
+//-----------------------------------------------------------------------------
 
+void consoleTradeRemoveInspiration(int i, int j)
+{
+	inspRemoveFromTrade(i, j);
+}
 
+void consoleTradeRemoveEnhancement(int idx)
+{
+	specRemoveFromTrade(idx);
+}
+
+void consoleTradeSetInfluence(int amount)
+{
+	Entity *e = playerPtr();
+
+	if (amount < 0)
+		amount = 0;
+	if (e && e->pchar && amount > e->pchar->iInfluencePoints)
+		amount = e->pchar->iInfluencePoints;
+	trade.aInfluence = amount;
+	sendTradeUpdate();
+}
+
+void consoleTradeSetOffered(int offered)
+{
+	trade.aAccepted = offered ? 1 : 0;
+	sendTradeUpdate();
+}
+
+void consoleTradeCancel(void)
+{
+	sendTradeCancel(TRADE_FAIL_I_LEFT);
+	window_setMode(WDW_TRADE, WINDOW_SHRINKING);
+}

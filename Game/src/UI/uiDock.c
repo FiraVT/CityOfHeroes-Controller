@@ -24,6 +24,7 @@
 #include "cmdparse/cmdgame.h"
 #include "account/AccountData.h"
 #include "player/inventory_client.h"
+#include "win/input.h"
 
 //------------------------------------------------------------------------------------------------------
 // Init ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -32,6 +33,16 @@
 static ContextMenu * dockContext = {0};
 static int windowNums[MAX_WINDOW_COUNT] = {0};
 static int menuNums[MENU_TOTAL] = {0};
+
+// The game menu where the pointer is, for when the status bar and its Menu tab
+// are hidden.
+void dock_openAtMouse(void)
+{
+	int x, y;
+
+	inpMousePos(&x, &y);
+	contextMenu_set(dockContext, x, y, NULL);
+}
 
 void dock_open()
 {

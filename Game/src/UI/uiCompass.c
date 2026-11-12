@@ -843,6 +843,15 @@ static ToolTip compassTip = {0};
 
 #define MIN_OPACITY 77
 
+// The exit button is up, so a controller's Use button can leave the mission
+// without reaching it.
+static int s_missionExitShown;
+
+int compass_MissionExitAvailable(void)
+{
+	return s_missionExitShown && game_state.mission_map;
+}
+
 // The exit button needs to persist even when the task is cleared
 static int compass_showExitButton(float x, float y, float z, float wd, float ht, float *used_wd, float scale)
 {
@@ -875,6 +884,7 @@ static int compass_showExitButton(float x, float y, float z, float wd, float ht,
     }
 
     s_lastMap = game_state.base_map_id;
+    s_missionExitShown = exitMissionShow;
 
     if (exitMissionShow)
     {

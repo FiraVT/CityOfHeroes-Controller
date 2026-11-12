@@ -42,6 +42,8 @@
 #include "entity/character_target.h"
 #include <utilitieslib/language/MessageStoreUtil.h>
 #include "entity/teamCommon.h"
+#include "sound/sound.h"
+#include "win/gamepad.h"
 
 static int friendListRebuildRequired = 0;
 static int globalFriendListRebuildRequired = 0;
@@ -53,6 +55,47 @@ static char oldGlobalIgnoreSelectionHandle[128];
 static char comboSelectionTitle[128] = {0};
 
 static UIListView* friendListView;
+// Y on the pad at the Friends tab: invite the friend whose row the pointer is
+// on.
+static int s_padInvite;
+
+void friend_padInvite(void)
+{
+	s_padInvite = 1;
+}
+
+static void friend_runPadInvite(void)
+{
+	Friend *item = NULL;
+	char buf[128];
+	int i;
+
+	s_padInvite = 0;
+	if (!friendListView)
+		return;
+
+	for (i = 0; i < eaSize(&friendListView->items) &&
+		    i < eaSize(&friendListView->itemWindows);
+	     i++) {
+		if (uiMouseCollision(friendListView->itemWindows[i]))
+			item = friendListView->items[i];
+	}
+	if (!item)
+		item = friendListView->selectedItem;
+
+	if (!item || !item->online || !item->name) {
+		gamepadDebugNote(
+			item ? "friend invite: offline"
+			     : "friend invite: no row under the pointer");
+		sndPlay("N_Error", SOUND_GAME);
+		return;
+	}
+
+	friendListView->selectedItem = item;
+	snprintf(buf, sizeof(buf), "i %s", item->name);
+	gamepadDebugNote(buf);
+	cmdParse(buf);
+}
 static UIListView * globalFriendListView;
 static UIListView * globalIgnoreListView;
 static UIListView * channelView[MAX_WATCHING];
@@ -438,6 +481,9 @@ int oldFriendWindow(float x, float y, float z, float wd, float ht, float scale, 
 
     // Handle list view input.
     uiLVHandleInput(friendListView, pen);
+
+    if (s_padInvite)
+	    friend_runPadInvite();
 
     // Did the user pick someone from the friends list?
     if(friendListView->newlySelectedItem && friendListView->selectedItem)

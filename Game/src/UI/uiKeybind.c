@@ -487,6 +487,25 @@ void keybind_setPadModifiersHeld(int mask)
 	pad_held_mask = mask & KEYBIND_PADMOD_ALL;
 }
 
+const char *keybind_commandFor(int key, int mod)
+{
+	int i;
+
+	if (key <= 0 || key >= BIND_MAX || mod < 0 || mod >= MOD_TOTAL)
+		return NULL;
+
+	for (i = eaSize(&kbProfiles) - 1; i >= 0; i--) {
+		KeyBindProfile *profile = kbProfiles[i];
+		const char *command = profile->binds[key].command[mod];
+
+		if (command && command[0])
+			return command;
+		if (!profile->trickleKeys)
+			break;
+	}
+	return NULL;
+}
+
 /* Gamepad modifier bit of a bind name such as "LT", or 0. */
 static int keybind_padModifierBit(const char *name)
 {

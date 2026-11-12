@@ -14,6 +14,9 @@ void addLFG( ComboBox * cb );
 
 
 int team_select( TeamMembers *members, int idx );
+// Targets the slot-th teammate other than yourself, in team order, as the
+// console team frames list them.
+int team_select_other(int slot);
 void setTeamBuffMode( int mode );
 void searchClearComment();
 
@@ -33,6 +36,8 @@ typedef struct SearchOption
 
 SearchOption * lfg_getSearchOption( int lfg );
 void league_updateTabCount();
+// Switches the League window to its grid of teams.
+void league_useGridView(void);
 typedef char MapName[256];
 extern MapName teamMapNames[MAX_TEAM_MEMBERS];
 extern MapName leagueMapNames[MAX_LEAGUE_MEMBERS];

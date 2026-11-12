@@ -721,6 +721,13 @@ void souvenirClueTab( int souvenirDataIdx )
 }
 
 
+int clue_HasAny(void)
+{
+	return eaSize(&storyClues) || eaSize(&keyClues) ||
+	       eaSize(&souvenirData[0].souvenirClues) ||
+	       eaSize(&souvenirData[1].souvenirClues);
+}
+
 //
 //
 int clueWindow()

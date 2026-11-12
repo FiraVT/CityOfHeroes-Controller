@@ -930,10 +930,14 @@ void hwcursorInit()
 #endif
 }
 
+int gamepadPointerHidden(void);
+
 void hwcursorSet()
 {
     PERFINFO_AUTO_START("hwcursorSet", 1);
-        if (curse && game_state.can_set_cursor)
+    if (gamepadPointerHidden())
+	    SetCursor(NULL);
+    else if (curse && game_state.can_set_cursor)
             SetCursor(curse);
         else if(GetCursor())
             SetCursor(GetCursor());

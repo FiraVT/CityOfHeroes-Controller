@@ -12,6 +12,9 @@ int isNotFriend(void *foo);
 
 void displayFriendsButton( float sx, float sy, float sz );
 int  friendWindow();
+// Invites the friend on the row under the pointer, for Y on the pad. Runs as
+// the window next draws.
+void friend_padInvite(void);
 
 void AddGlobalIgnore(char * handle, int db_id);
 void UpdateGlobalIgnore(char * oldHandle, char * newHandle);

@@ -446,7 +446,9 @@ void smf_Select(SMBlock *pBlock, TextAttribs *pattrs, int iXBase, int iYBase, in
         BuildCBox(&box, pBlock->pos.iX + iXBase, pBlock->pos.iY + iYBase,
             pBlock->pos.iWidth - 1, pBlock->pos.iHeight - 1);
 
-        if (mouseCollision(&box))
+        // Links are stops for the gamepad's D-pad. Plain words only answer the mouse, or the D-pad would
+        // stop on every word of a description before reaching the buttons under it.
+        if (eaiSize(&pattrs->piAnchor) > 1 && s_bAllowAnchor ? mouseCollision(&box) : mouseCollisionQuiet(&box))
         {
             pBlock->bHover = true;
         }

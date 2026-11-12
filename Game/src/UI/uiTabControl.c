@@ -894,7 +894,16 @@ uiTabData drawTabControl(uiTabControl * tc, float x, float y, float z, float wid
             
              // collisions & dragging...
 
-               BuildCBox(&box, x+TAB_OVERLAP*scale, y, (texWidth -(2*TAB_OVERLAP))*scale, tex[MID]->height*scale);    
+               BuildCBox(&box, x+TAB_OVERLAP*scale, y, (texWidth -(2*TAB_OVERLAP))*scale, tex[MID]->height*scale);
+              // A tab cut off by the scroll arrows is hit only where it shows,
+              // so the middle of the box, where the pad aims, is not an arrow.
+              if( bStoppedDrawingEarly )
+              {
+                  if( isVertical )
+                      box.hy = MAX( box.ly, MIN( box.hy, arrowsStart ) );
+                  else
+                      box.hx = MAX( box.lx, MIN( box.hx, arrowsStart ) );
+              }
               //drawBox(&box, z+1000, CLR_RED, 0);
  
               if( mouseClickHit( &box, MS_LEFT ) ||

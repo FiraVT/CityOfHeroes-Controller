@@ -61,5 +61,7 @@ void handleCursor();
 void setCursor( char *base, char *overlay, int software, int hotX, int hotY );
 void destroyCursorHashTable();
 void interactWithInterestingGroupDef( Entity * player, GroupDef * def, Vec3 collisionPos, DefTracker * tracker );
+void interactWithNearest(void);
+const char *interactPromptVerb(void);
 
 #endif

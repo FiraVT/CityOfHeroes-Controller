@@ -55,6 +55,7 @@
 #include "win/hwlight.h"
 #include "UI/uiEmail.h"
 #include "player/inventory_client.h"
+#include "win/gamepad.h"
 
 typedef enum
 {
@@ -63,6 +64,7 @@ typedef enum
     OPTION_BINDS,        // Keymapping
     OPTION_GRAPHICS,    // Graphics and Audio
     OPTION_WINDOWS,        // Windows
+    OPTION_GAMEPAD,        // Gamepad
 } OptionTab;
 
 static int s_CurTab = OPTION_MISC;
@@ -483,6 +485,32 @@ static int s_antialiasing;
 
 static int s_razerTray;
 
+// The Gamepad tab. These mirror the gamepad settings: each frame the tab shows
+// they are read, and anything changed is applied at once. gamepad.c saves them
+// to the registry a moment after the last change.
+static bool s_gpEnabled;
+static bool s_gpConsoleUi;
+static bool s_gpCompact;
+static bool s_gpSwapSides;
+static bool s_gpAutoTarget;
+static bool s_gpInvert;
+static bool s_gpRumble;
+static int s_gpLookSpeed;
+static int s_gpCursorSpeed;
+static float s_gpMoveDeadzone;
+static float s_gpLookDeadzone;
+
+static SliderParam s_paramGamepadLookSpeed = { 60.0f, 200.0f, 600.0f, 1.0f };
+static SliderParam s_paramGamepadCursorSpeed = { 300.0f, 1100.0f, 3000.0f,
+						 1.0f };
+static SliderParam s_paramGamepadDeadzone = { 0.0f, 0.18f, 0.5f, 1.0f };
+
+// Everything below the switch has no effect while it is off.
+static OptionDisplayType gamepadOptionShown(GameOptions *unused)
+{
+	return s_gpEnabled ? OPT_DISPLAY : OPT_DISABLE;
+}
+
 #define IS_AN_ADVANCED_OPTION if (!s_gfx.showAdvanced) return OPT_HIDE;
 
 #define SLIDER_EPSILON 0.01f
@@ -593,6 +621,118 @@ static void ToggleTeamCompleteOption(void *unused);
 
 static void ResetWindows(void *pv);
 //----------------------------------------------------------------------------------------------------------------
+
+static GameOptions s_optListGamepad[] = {
+	{ 0, kOptionType_Title, "Gamepad", 0, NULL, kOptionType_Nop, NULL, NULL,
+	  NULL, NULL },
+	{ 0, kOptionType_Bool, "Enable Gamepad",
+	  "Play with a controller. While this is off a plugged in controller "
+	  "does nothing.",
+	  &s_gpEnabled, kOptionType_Bool, &s_gpEnabled, NULL, "OptionEnabled",
+	  "OptionDisabled" },
+	{ 0, kOptionType_Bool, "Gamepad Interface",
+	  "Swap the power tray and status bars for an action bar laid out like "
+	  "the controller.",
+	  &s_gpConsoleUi, kOptionType_Bool, &s_gpConsoleUi, NULL,
+	  "OptionEnabled", "OptionDisabled", gamepadOptionShown },
+	{ 0, kOptionType_Bool, "Use Compact Action Bar",
+	  "Show only the buttons in your hands, changing as the triggers are "
+	  "held.",
+	  &s_gpCompact, kOptionType_Bool, &s_gpCompact, NULL, "OptionEnabled",
+	  "OptionDisabled", gamepadOptionShown },
+
+	{ 0, kOptionType_Title, "Targeting", 0, NULL, kOptionType_Nop, NULL,
+	  NULL, NULL, NULL },
+	{ 0, kOptionType_Bool, "Swap Target Bumpers",
+	  "LB targets foes and RB targets friends, instead of the other way "
+	  "round.",
+	  &s_gpSwapSides, kOptionType_Bool, &s_gpSwapSides, NULL,
+	  "OptionEnabled", "OptionDisabled", gamepadOptionShown },
+	{ 0, kOptionType_Bool, "Auto Target Foes",
+	  "An attack fired with nothing to hit targets the nearest foe first.",
+	  &s_gpAutoTarget, kOptionType_Bool, &s_gpAutoTarget, NULL,
+	  "OptionEnabled", "OptionDisabled", gamepadOptionShown },
+
+	{ 0, kOptionType_Title, "Movement and Camera", 0, NULL, kOptionType_Nop,
+	  NULL, NULL, NULL, NULL },
+	{ 0, kOptionType_Bool, "Invert Camera",
+	  "Push the right stick up to look down.", &s_gpInvert,
+	  kOptionType_Bool, &s_gpInvert, NULL, "OptionEnabled",
+	  "OptionDisabled", gamepadOptionShown },
+	{ 0, kOptionType_String, "Camera Speed",
+	  "How fast the right stick turns the camera.", NULL,
+	  kOptionType_IntSlider, &s_gpLookSpeed, &s_paramGamepadLookSpeed, NULL,
+	  NULL, gamepadOptionShown },
+	{ 0, kOptionType_String, "Pointer Speed",
+	  "How fast the right stick moves the pointer in menus.", NULL,
+	  kOptionType_IntSlider, &s_gpCursorSpeed, &s_paramGamepadCursorSpeed,
+	  NULL, NULL, gamepadOptionShown },
+	{ 0, kOptionType_String, "Movement Dead Zone",
+	  "How far the left stick moves before your character does.", NULL,
+	  kOptionType_FloatSlider, &s_gpMoveDeadzone, &s_paramGamepadDeadzone,
+	  NULL, NULL, gamepadOptionShown },
+	{ 0, kOptionType_String, "Camera Dead Zone",
+	  "How far the right stick moves before the camera does.", NULL,
+	  kOptionType_FloatSlider, &s_gpLookDeadzone, &s_paramGamepadDeadzone,
+	  NULL, NULL, gamepadOptionShown },
+	{ 0, kOptionType_Bool, "Rumble",
+	  "Shake the controller when you take a heavy hit.", &s_gpRumble,
+	  kOptionType_Bool, &s_gpRumble, NULL, "OptionEnabled",
+	  "OptionDisabled", gamepadOptionShown },
+	{ 0 },
+};
+
+// Fills the tab's values from the gamepad settings.
+static void gamepadOptionsRead(void)
+{
+	s_gpEnabled = gamepadGetSetting("enabled") != 0;
+	s_gpConsoleUi = gamepadGetSetting("console_ui") != 0;
+	s_gpCompact = gamepadGetSetting("console_compact") != 0;
+	s_gpSwapSides = gamepadGetSetting("swap_target_sides") != 0;
+	s_gpAutoTarget = gamepadGetSetting("auto_target") != 0;
+	s_gpInvert = gamepadGetSetting("invert_y") != 0;
+	s_gpRumble = gamepadGetSetting("rumble") > 0;
+	s_gpLookSpeed = (int)(gamepadGetSetting("look_yaw_speed") + 0.5f);
+	s_gpCursorSpeed = (int)(gamepadGetSetting("cursor_speed") + 0.5f);
+	s_gpMoveDeadzone = gamepadGetSetting("move_deadzone");
+	s_gpLookDeadzone = gamepadGetSetting("look_deadzone");
+}
+
+static void gamepadOptionApply(const char *name, F32 value)
+{
+	// A slider hands back its value with a little rounding every frame,
+	// which is not a change.
+	if (fabsf(gamepadGetSetting(name) - value) > 0.001f) {
+		gamepadSetSetting(name, value);
+	}
+}
+
+// Applies what the tab changed, and saves once the player has stopped changing
+// things for a second.
+static void gamepadOptionsWrite(void)
+{
+	F32 oldYaw = gamepadGetSetting("look_yaw_speed");
+
+	gamepadOptionApply("enabled", s_gpEnabled ? 1.0f : 0.0f);
+	gamepadOptionApply("console_ui", s_gpConsoleUi ? 1.0f : 0.0f);
+	gamepadOptionApply("console_compact", s_gpCompact ? 1.0f : 0.0f);
+	gamepadOptionApply("swap_target_sides", s_gpSwapSides ? 1.0f : 0.0f);
+	gamepadOptionApply("auto_target", s_gpAutoTarget ? 1.0f : 0.0f);
+	gamepadOptionApply("invert_y", s_gpInvert ? 1.0f : 0.0f);
+	gamepadOptionApply("rumble", s_gpRumble ? 1.0f : 0.0f);
+	gamepadOptionApply("cursor_speed", (F32)s_gpCursorSpeed);
+	gamepadOptionApply("move_deadzone", s_gpMoveDeadzone);
+	gamepadOptionApply("look_deadzone", s_gpLookDeadzone);
+
+	// One camera speed drives both axes, keeping pitch in the same
+	// proportion to turning as before.
+	if (oldYaw > 0 && (F32)s_gpLookSpeed != oldYaw) {
+		gamepadOptionApply("look_pitch_speed",
+				   gamepadGetSetting("look_pitch_speed") *
+					   s_gpLookSpeed / oldYaw);
+		gamepadOptionApply("look_yaw_speed", (F32)s_gpLookSpeed);
+	}
+}
 
 static GameOptions s_optListGeneral[] =
 {
@@ -3277,6 +3417,7 @@ int optionsWindow()
     static ScrollBar keyBindsSB = { WDW_OPTIONS, 0 };
     static ScrollBar controlsSB = { WDW_OPTIONS, 0 };
     static ScrollBar graphicsSB = { WDW_OPTIONS, 0 };
+    static ScrollBar gamepadSB = { WDW_OPTIONS, 0 };
     static uiTabControl *tc;
     static float lR = -1.f, lG = -1.f, lB = -1.f, lA = -1.f;
     U32 applyNowButtonColor;
@@ -3359,7 +3500,9 @@ int optionsWindow()
         uiTabControlAdd(tc,"Keymapping",(int*)OPTION_BINDS);
         uiTabControlAdd(tc,"OptionsGraphicsAndSound",(int*)OPTION_GRAPHICS);
         uiTabControlAdd(tc,"OptionsWindows",(int*)OPTION_WINDOWS);
+	uiTabControlAdd(tc, "Gamepad", (int *)OPTION_GAMEPAD);
 
+	initToolTips(s_optListGamepad);
         initToolTips(s_optListGeneral);
         initToolTips(s_optListControls);
         initToolTips(s_optListGraphics);
@@ -3543,6 +3686,17 @@ int optionsWindow()
         dht += 140*sc;
         set_scissor(false);
         doScrollBar( &keyBindsSB,ht - (PIX3+R10)*2*sc, dht, wd, (PIX3+R10)*sc, z, &clipbox, 0);
+    }
+    else if(s_CurTab == OPTION_GAMEPAD)
+    {
+        int dht = 0, count;
+
+        gamepadOptionsRead();
+        count = HandleOptionList(s_optListGamepad, x+25*sc, y-gamepadSB.offset, x+wd-290*sc, y+dht-gamepadSB.offset, wd - 33*sc,z+1,sc,&clipbox, color, bcolor);
+        gamepadOptionsWrite();
+        dht = (count*LINE_HEIGHT+70)*sc;
+        set_scissor(false);
+        doScrollBar( &gamepadSB, ht - (PIX3+R10)*2*sc, dht, wd, (PIX3+R10)*sc, z, &clipbox, 0 );
     }
     else if(s_CurTab == OPTION_CONTROLS)
     {

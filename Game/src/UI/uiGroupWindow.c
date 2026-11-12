@@ -127,6 +127,13 @@ typedef enum GroupExpandedViewFlags
 static int gShowBuffs = FALSE;
 static int gViewFlags = 0;
 
+// The console HUD's League tab has the room to show every team at once, as the
+// grid view does.
+void league_useGridView(void)
+{
+	gViewFlags |= GEV_GRID;
+}
+
 
 MapName teamMapNames[MAX_TEAM_MEMBERS] = {0};
 MapName leagueMapNames[MAX_LEAGUE_MEMBERS] = {0};
@@ -243,6 +250,23 @@ void setTeamBuffMode( int mode )
 #define TXT_XOFF            35
 #define TXT_YOFF            16
 #define PULSE_TIMER_MAX        90
+int team_select_other(int slot)
+{
+	Entity *e = playerPtr();
+	int i, seen = 0;
+
+	if (!e || !e->teamup)
+		return 0;
+
+	for (i = 0; i < e->teamup->members.count; i++) {
+		if (e->teamup->members.ids[i] == e->db_id)
+			continue;
+		if (++seen == slot)
+			return team_select(&e->teamup->members, i + 1);
+	}
+	return 0;
+}
+
 int team_select( TeamMembers *members, int idx )
 {
     Entity *e = playerPtr();

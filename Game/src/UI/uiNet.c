@@ -36,6 +36,7 @@
 #include "UI/uiDialog.h"
 #include "UI/uiConsole.h"
 #include "uiSalvage.h"
+#include "UI/uiConsoleHud.h"
 #include "UI/uiCompass.h"
 #include "UI/uiAutomap.h"
 #include "UI/uiSupergroup.h"
@@ -2523,7 +2524,9 @@ void receiveSearchResults(Packet *pak)
     int count         = pktGetBits( pak, 32 );
     int i;
 
-    window_setMode( WDW_LFG, WINDOW_GROWING );
+    // The console Social screen may be showing Search already, and then the window must stay closed.
+    if (!consoleNavShowsWindow(WDW_LFG))
+        window_setMode( WDW_LFG, WINDOW_GROWING );
      lfg_clearAll();
 
     lfg_setResults( result_count, count );
@@ -3307,7 +3310,13 @@ void receiveBaseInteract(Packet * pak)
     {
         if( interactionType == s_baseWdws[i].df )
         {
-            if (activate && !windowUp(s_baseWdws[i].wdw))
+            // An invention table out in the world, not one in a base, opens the console Invention screen
+            // while the console HUD is up. The screen hands any other table back to the window.
+            if (activate && s_baseWdws[i].wdw == WDW_RECIPEINVENTORY && !detailID && !windowUp(WDW_RECIPEINVENTORY) && consoleInventionTableOpened())
+            {
+                // The screen opens once the character's update names the table.
+            }
+            else if (activate && !windowUp(s_baseWdws[i].wdw))
             {
                 if (s_baseWdws[i].wdw == WDW_RECIPEINVENTORY)
                     requestArchitectInventory();
@@ -3316,6 +3325,8 @@ void receiveBaseInteract(Packet * pak)
             }
             else 
             {
+		    if (!activate && s_baseWdws[i].wdw == WDW_RECIPEINVENTORY)
+			    consoleInventionTableClosed();
                 window_setMode(s_baseWdws[i].wdw, WINDOW_SHRINKING);
             }
             interactionHandled = true;

@@ -137,6 +137,8 @@ void ServerWaypointReceive(Packet* pak);
 
 // draw the compass
 int compassWindow();
+// True while the compass shows its button for leaving a finished mission.
+int compass_MissionExitAvailable(void);
 
 extern Destination   activeTaskDest;    // Where is the active task? Should only be set to active task location.
 extern Destination   waypointDest;        // User selected waypoint.  All other locations should be marked as a waypoint.

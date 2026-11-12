@@ -677,6 +677,36 @@ void drawHealthBar(float x, float y, float z, float width, float curr, float tot
 
 }
 
+// A health or endurance bar drawn at the value it is given, without the easing
+// drawHealthBar keeps for the player's own bars. That easing is one value per
+// bar type, so bars drawn once per teammate would all pull it toward each
+// other's values every frame and bounce up and down.
+void drawHealthBarStill(float x, float y, float z, float width, float curr,
+			float total, float scale, int frameColor, int barColor,
+			int type)
+{
+	static AtlasTex *label_hp;
+	static AtlasTex *label_end;
+	float percentage = total > 0 ? curr / total : 0.f;
+
+	if (!label_hp) {
+		label_hp = atlasLoadTexture("healthbar_label_hp.tga");
+		label_end = atlasLoadTexture("healthbar_label_end.tga");
+	}
+
+	if (percentage > 1.f)
+		percentage = 1.f;
+	if (percentage < 0.f)
+		percentage = 0.f;
+
+	drawBar(x, y, z, width, scale, percentage, 0.f, barColor, 0);
+	if (!showRage)
+		drawHealthBarFrame(x, y, z - 2, width, scale, frameColor);
+	display_sprite(type == HEALTHBAR_ENDURANCE ? label_end : label_hp,
+		       x + 5 * scale, y + 4 * scale, z + 2, scale, scale,
+		       0xffffff88);
+}
+
 void checkEnableToolTips(CBox* box)
 {
 	if (mouseClickHit(box, MS_RIGHT))
@@ -1322,6 +1352,71 @@ static const char * statuscm_restAdapter(void* arg0)
     return statuscm_rest((void*)arg0);
 }
 
+int consoleHudActive(void);
+
+// The status window's contents for the console HUD: every bar, plus buffs and
+// effects above them, so nothing is lost when the window itself is hidden.
+void status_drawConsoleFrame(float x, float y, float z, float wd, float scale,
+			     int color, int bcolor)
+{
+	static ToolTipParent consoleTipParent = { 0 };
+	Entity *e = playerPtr();
+	float barY, barStep;
+	float buffY;
+
+	if (!e || !e->pchar)
+		return;
+
+	drawExperience(x, y - 26.0f * scale, z, wd, scale, color, bcolor);
+
+	// The bars sit over the experience bar as they do in the status window,
+	// so the last one clears it.
+	barY = y +
+	       ((showRage ? HEALTH_YOFF_SKILLS : HEALTH_YOFF) - 26.0f) * scale;
+	barStep = (showRage ? BAR_HT_SKILLS : BAR_HT) * scale;
+
+	drawHealthBar(
+		x, barY, z + 4, wd,
+		e->pchar->attrCur.fHitPoints + e->pchar->attrMax.fAbsorb,
+		e->pchar->attrMax.fHitPoints + e->pchar->attrMax.fAbsorb, scale,
+		color,
+		getHealthColor(true, e->pchar->attrCur.fHitPoints /
+					     e->pchar->attrMax.fHitPoints),
+		HEALTHBAR_HEALTH);
+
+	if (e->pchar->attrMax.fAbsorb > 0)
+		drawHealthBar(x, barY, z + 4, wd, e->pchar->attrMax.fAbsorb,
+			      e->pchar->attrMax.fHitPoints +
+				      e->pchar->attrMax.fAbsorb,
+			      scale, color,
+			      getAbsorbColor(e->pchar->attrMax.fAbsorb /
+					     e->pchar->attrMax.fHitPoints),
+			      HEALTHBAR_ABSORB);
+
+	barY += barStep;
+	drawHealthBar(x, barY, z + 4, wd, e->pchar->attrCur.fEndurance,
+		      e->pchar->attrMax.fEndurance, scale, color,
+		      getEnduranceColor(e->pchar->attrCur.fEndurance /
+					e->pchar->attrMax.fEndurance),
+		      HEALTHBAR_ENDURANCE);
+
+	if (showRage) {
+		barY += barStep;
+		drawHealthBar(x, barY, z + 4, wd, e->pchar->attrCur.fMeter,
+			      e->pchar->attrMax.fMeter, scale, color,
+			      getRageColor(e->pchar->attrCur.fMeter /
+					   e->pchar->attrMax.fMeter),
+			      HEALTHBAR_RAGE);
+	}
+
+	status_notify(x + wd + 8.0f * scale, y, z + 8, scale);
+
+	buffY = status_drawBuffs(e, x, y - 30.0f * scale, z, wd, 0, scale, 1,
+				 &consoleTipParent);
+	buffY = status_drawChallenges(e, x, buffY, z, wd, scale, 1);
+	status_drawEffects(e, x, buffY, z, wd, scale);
+}
+
 int statusWindow()
 {
 	static AtlasTex* heroIcon = 0, * vigilanteIcon = 0, * villainIcon = 0, * rogueIcon = 0, * loyalistIcon = 0, * resistanceIcon = 0, * neutralPrimalIcon = 0, * ringIcon = 0;
@@ -1381,6 +1476,9 @@ int statusWindow()
 		contextMenu_addVariableText(gXpcm, statuscm_debtAdapter, NULL);
 		contextMenu_addVariableText(gXpcm, statuscm_restAdapter, NULL);
 	}
+
+	if (consoleHudActive())
+		return 0;
 
 	if (!window_getDims(WDW_STAT_BARS, &x, &y, &z, &wd, &ht, &scale, &color, &bcolor) || baseedit_Mode())
 		return 0;

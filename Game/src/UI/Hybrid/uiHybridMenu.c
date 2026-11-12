@@ -1,6 +1,7 @@
 
 #include <utilitieslib/stdtypes.h>
 #include "UI/Hybrid/uiHybridMenu.h"
+#include "win/gamepad.h"
 #include "UI/uiGame.h"                // for start_menu
 
 #include "UI/sprite/sprite_text.h"
@@ -8,6 +9,7 @@
 #include "UI/sprite/sprite_font.h"
 
 #include "win/input.h"
+#include "win/gamepad.h"
 #include <utilitieslib/components/earray.h>
 #include "win/win_init.h" // for windowClientSize
 #include "player/player.h"      // for playerPtr
@@ -474,7 +476,9 @@ int drawHybridNext( int dir, int locked, char * text )
     sButtonNext[dir].desc1 = text;
     sButtonNext[dir].text = buttonText;
     if (D_MOUSEHIT == drawHybridBarButton(&sButtonNext[dir], x, y, z, 150.f, 0.55f, 0, flags) ||
-        (!login && dir && inpEdgeNoTextEntry(INP_RETURN) && cur_idx != navigationSetSize[sMenuType]-1))  //enter only moves fwd, but not at the last screen
+        (!login && dir && inpEdgeNoTextEntry(INP_RETURN) && cur_idx != navigationSetSize[sMenuType]-1) ||  //enter only moves fwd, but not at the last screen
+        (!dir && !locked && gamepadTakeBack()) ||  // B on a controller is Back
+        (login && !locked && gamepadTakeForward()))  // and Start enters the game, which Enter does not here
     {
         if (sMenuType != HYBRID_MENU_NO_NAVIGATION && !noNav)
         {
@@ -1219,6 +1223,12 @@ int drawHybridBarLarge(HybridElement * hb, F32 cx, F32 cy, F32 z, F32 wd, int se
 
 
 
+// A bar opened with the pad keeps the focus while the list around it opens and slides, so the next press
+// carries on from it rather than from wherever the pointer was left.
+static const HybridElement *s_padFollowBar;
+static int s_padFollowFrames;
+static int s_padFollowMoves;
+
 int drawHybridBar( HybridElement * hb, int selected, F32 x, F32 cy, F32 z, F32 wd, F32 scale, int flags, F32 alpha, HAlign ha, VAlign va )
 {
     CBox box;
@@ -1305,6 +1315,26 @@ int drawHybridBar( HybridElement * hb, int selected, F32 x, F32 cy, F32 z, F32 w
                 sndPlay( "N_Select", SOUND_GAME );
                 ret = D_MOUSEDOUBLEHIT;
             }
+        }
+    }
+
+    if (ret == D_MOUSEHIT && gamepadConsoleUiEnabled() && gamepadUsedWithin(300))
+    {
+        s_padFollowBar = hb;
+        s_padFollowFrames = 40;
+        s_padFollowMoves = gamepadNavMoves();
+    }
+    else if (hb == s_padFollowBar && s_padFollowFrames > 0)
+    {
+        int fx, fy;
+
+        s_padFollowFrames--;
+        if (gamepadNavMoves() != s_padFollowMoves)
+            s_padFollowFrames = 0;
+        else
+        {
+            boxScreenCenter(&box, &fx, &fy);
+            gamepadFocusPoint(fx, fy);
         }
     }
 

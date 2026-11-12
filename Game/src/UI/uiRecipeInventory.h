@@ -40,6 +40,7 @@ void recipeInventoryReparse(void);
 void recipe_drag(int index, AtlasTex *icon, AtlasTex *overlay, float scale);
 int recipeInventoryWindow();
 float uiIncarnateRecipeDraw(treeRecipeDisplayState *pState, float x, float y, float z, float width, float scale);
+int uiIncarnateCreate(const DetailRecipe *recipe);
 
 #if !TEST_CLIENT
 AtlasTex * uiRecipeDrawIconEx(const DetailRecipe *pRec, int level, float x, float y, float z, float scale, int window, int showTooltip, int rgba, float tooltipOffsetY, int bDrawEnhancementsAsEnhancements);

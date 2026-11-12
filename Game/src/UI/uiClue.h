@@ -4,6 +4,9 @@
 typedef struct SouvenirClue SouvenirClue;
 
 int clueWindow();
+// True when the Clues window has anything to show: a clue, or a souvenir of
+// either kind.
+int clue_HasAny(void);
 void souvenirCluePrepareUpdate();
 void souvinerClueAdd( SouvenirClue* clue );
 void updateSouvenirClue( int uid, char * desc );

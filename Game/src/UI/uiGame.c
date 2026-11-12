@@ -61,6 +61,8 @@
 #include "UI/uiContextMenu.h"
 #include "UI/uiScrollBar.h"
 #include "UI/uiGame.h"
+#include "UI/uiConsoleHud.h"
+#include "win/gamepadNav.h"
 #include "UI/uiAutomapFog.h"
 #include "UI/uiQuit.h"
 #include "entity/character_animfx_client.h"
@@ -623,10 +625,16 @@ void serve_menus()
     clearHybridToolTipIfUnused();
     resetHybridToolTipAwareness();
 
+    gamepadNavSetWindow(NAV_CONTEXT_MENU);
      displayCurrentContextMenu();
+    gamepadNavSetWindow(NAV_OVERLAY);
 
-    // show dialogs if there are any
+    // show dialogs if there are any. They are drawn outside the window loop, so
+    // the pad is told whose buttons these are, or a popup's OK would be lost
+    // among everything else on screen.
+    gamepadNavSetWindow(WDW_DIALOG);
     displayDialogQueue();
+    gamepadNavSetWindow(NAV_OVERLAY);
 
     if( gNextMenu >= 0 ) //handle menu changes from dialog boxes
     {
@@ -666,8 +674,14 @@ void serve_menus()
         PERFINFO_AUTO_START_STATIC(startName, &menuInfos[gCurrentMenu], 1);
 
         // execute the function for this particular menu
+        // (the console HUD draws over the game windows, and hides itself outside the game)
         if( !game_state.viewCutScene )
+        {
             menuFuncs[gCurrentMenu]();
+	    consoleHudDraw();
+	    consoleFocusDraw();
+	    gamepadKeyboardDraw();
+	}
 
         PERFINFO_AUTO_STOP_CHECKED(startName);
     }

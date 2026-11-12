@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <utilitieslib/stdtypes.h>
+#include "win/gamepad.h"
+#include "UI/uiConsoleHud.h"
 #include "cmdparse/cmdaccountserver.h"
 #include "bases/DetailRecipe.h"
 #include "entity/character_workshop.h"
@@ -322,6 +324,33 @@ enum
     CMD_TARGET_CUSTOM_PREV,
 
     CMD_INTERACT,
+    CMD_GAMEPAD_CURSOR,
+    CMD_GAMEPAD_RELOAD,
+    CMD_GAMEPAD_SAVE,
+    CMD_GAMEPAD_STATUS,
+    CMD_GAMEPAD_TOGGLE,
+    CMD_GAMEPAD_DEBUG,
+    CMD_GAMEPAD_SET,
+    CMD_GAMEPAD_CHAT,
+    CMD_CONSOLE_UI,
+    CMD_CONSOLE_MENU,
+    CMD_CONSOLE_POWERS,
+    CMD_CONSOLE_ENHANCEMENTS,
+    CMD_CONSOLE_INCARNATES,
+    CMD_CONSOLE_INVENTION,
+    CMD_CONSOLE_HUD_EDIT,
+    CMD_CONSOLE_GAME_MENU,
+    CMD_CONSOLE_INSPIRATIONS,
+    CMD_CONSOLE_TEAM,
+    CMD_CONSOLE_LEAGUE_TEAM,
+    CMD_CONSOLE_TEAM_LIST,
+    CMD_TEAM_STEP,
+    CMD_CONSOLE_NAV,
+    CMD_CONSOLE_NAV_TAB,
+    CMD_CONSOLE_SOCIAL,
+    CMD_TARGET_MENU,
+    CMD_TARGET_OR_MENU,
+    CMD_CONSOLE_COMPACT,
     CMD_MOUSE_LOOK,
     CMD_INFO,
     CMD_INFO_TAB,
@@ -518,6 +547,7 @@ enum
     CMD_TRAY_PREV_ALT,
     CMD_TRAY_GOTO,
     CMD_TEAM_SELECT,
+    CMD_TEAM_SELECT_OTHER,
     CMD_PET_SELECT,
     CMD_PET_SELECT_NAME,
     CMD_SOUVENIRCLUE_PRINT,
@@ -860,6 +890,62 @@ Cmd game_cmds[] =
                         "Saves all keybinds to specified file." },
     { 0, "bind_save_file_silent", CMD_BIND_SAVE_FILE_SILENT, {{ CMDSTR(tmp_str) }}, 0,
                         "Saves all keybinds to specified file." },
+    { 0, "interact", CMD_INTERACT, {{ 0 }}, 0,
+                        "Talks to, enters or uses the current target or the nearest thing in reach." },
+    { 0, "gamepad_cursor", CMD_GAMEPAD_CURSOR, {{ 0 }}, 0,
+                        "Toggles between steering the camera and moving the mouse cursor with the right stick." },
+    { 0, "gamepad_reload", CMD_GAMEPAD_RELOAD, {{ 0 }}, 0,
+                        "Reads the gamepad settings from the registry again. The layout is the keybind profile." },
+    { 0, "gamepad_save", CMD_GAMEPAD_SAVE, {{ 0 }}, 0,
+                        "Saves the gamepad settings to the registry. /bind_save saves the layout with the other keybinds." },
+    { 0, "gamepad_status", CMD_GAMEPAD_STATUS, {{ 0 }}, 0,
+                        "Shows whether a gamepad is connected." },
+    { 0, "gamepad", CMD_GAMEPAD_TOGGLE, {{ 0 }}, 0,
+                        "Turns gamepad support on or off, like Options, Gamepad. Off, a controller does nothing." },
+    { 0, "gamepad_set", CMD_GAMEPAD_SET, {{ CMDINT(tmp_int) }}, CMDF_HIDEVARS,
+                        "Moves the three power trays together to the next (1) or previous (-1) set." },
+    { 0, "gamepad_chat", CMD_GAMEPAD_CHAT, {{ 0 }}, 0,
+                        "Opens the chat line with the on-screen keyboard." },
+    { 0, "console_ui", CMD_CONSOLE_UI, {{ 0 }}, 0,
+                        "Switches between the standard tray and the console HUD." },
+    { 0, "console_team", CMD_CONSOLE_TEAM, {{ 0 }}, 0,
+                        "Shows or hides the team frames down the left of the console HUD." },
+    { 0, "console_league_team", CMD_CONSOLE_LEAGUE_TEAM, {{ 0 }}, 0,
+                        "Shows or hides the team frames while in a league, where every team is listed." },
+    { 0, "team_step", CMD_TEAM_STEP, {{ CMDSTR(tmp_str) }}, 0,
+                        "Moves the selection through the team and league lists on the console HUD: up, down, left or right." },
+    { 0, "console_team_list", CMD_CONSOLE_TEAM_LIST, {{ 0 }}, 0,
+                        "Shows a team as a short list, as a league's teams are, instead of the frames." },
+    { 0, "console_compact", CMD_CONSOLE_COMPACT, {{ 0 }}, 0,
+                        "Switches the console HUD between all its clusters and one that follows the triggers." },
+    { 0, "console_powers", CMD_CONSOLE_POWERS, {{ 0 }}, 0,
+                        "Opens the screen that binds powers to gamepad buttons." },
+    { 0, "console_enhancements", CMD_CONSOLE_ENHANCEMENTS, {{ 0 }}, 0,
+                        "Opens the screen that slots enhancements with the gamepad, or Manage without the console HUD." },
+    { 0, "console_incarnates", CMD_CONSOLE_INCARNATES, {{ 0 }}, 0,
+                        "Opens the screen that equips, makes and converts Incarnate abilities with the gamepad." },
+    { 0, "console_invention", CMD_CONSOLE_INVENTION, {{ 0 }}, 0,
+                        "Opens the screen that builds recipes and sorts recipes and salvage with the gamepad." },
+    { 0, "console_hud_edit", CMD_CONSOLE_HUD_EDIT, {{ 0 }}, 0,
+                        "Moves and sizes the pieces of the console HUD with the mouse or the gamepad." },
+    { 0, "console_game_menu", CMD_CONSOLE_GAME_MENU, {{ 0 }}, 0,
+                        "Opens the console HUD's game menu, for what the menu ring does not have." },
+    { 0, "console_inspirations", CMD_CONSOLE_INSPIRATIONS, {{ 0 }}, 0,
+                        "Opens the inspirations screen, which uses them and combines three of the same into another." },
+    { 0, "console_nav", CMD_CONSOLE_NAV, {{ 0 }}, 0,
+                        "Opens or closes the Navigation screen: map, missions, contacts, clues and badges as tabs." },
+    { 0, "console_nav_tab", CMD_CONSOLE_NAV_TAB, {{ CMDSTR(tmp_str) }}, 0,
+                        "Opens a console screen on a tab: map, missions, contacts, clues, badges, search, team, friends, league or supergroup." },
+    { 0, "console_social", CMD_CONSOLE_SOCIAL, {{ 0 }}, 0,
+                        "Opens or closes the Social screen: search, team, friends, league and supergroup as tabs." },
+    { 0, "target_menu", CMD_TARGET_MENU, {{ 0 }}, 0,
+                        "Opens the current target's menu, for inviting, trading and the rest, without the mouse." },
+    { 0, "target_or_menu", CMD_TARGET_OR_MENU, {{ 0 }}, 0,
+                        "Opens the current target's menu, or the radial menu when nothing is targeted." },
+    { 0, "console_menu", CMD_CONSOLE_MENU, {{ 0 }}, 0,
+                        "Opens the radial menu on the console HUD, or the standard menu otherwise." },
+    { 0, "gamepad_debug", CMD_GAMEPAD_DEBUG, {{ 0 }}, 0,
+                        "Toggles logging every gamepad press to <INSTALL DIR>/gamepad_debug.log." },
     { 0, "wdw_load_file", CMD_WDW_LOAD_FILE, {{ CMDSTR(tmp_str) }}, 0,
                         "Reads window configuration file." },
     { 0, "wdw_load", CMD_WDW_LOAD, {{ 0 }}, 0,
@@ -2099,6 +2185,8 @@ Cmd game_cmds[] =
                         "Clear all trays (excepting macros)" },
     { 0, "team_select",        CMD_TEAM_SELECT, {{ CMDINT(tmp_int) }}, CMDF_HIDEVARS,
                         "Select Team member." },
+    { 0, "team_select_other",        CMD_TEAM_SELECT_OTHER, {{ CMDINT(tmp_int) }}, CMDF_HIDEVARS,
+                        "Selects the nth teammate other than yourself, as the console team frames list them." },
     { 0, "pet_select",        CMD_PET_SELECT, {{ CMDINT(tmp_int) }}, CMDF_HIDEVARS,
                         "Select Pet." },
     { 0, "pet_select_name",        CMD_PET_SELECT_NAME, {{ CMDSENTENCE(tmp_str) }}, CMDF_HIDEVARS,
@@ -3794,6 +3882,65 @@ int cmdGameParse(char *str, int x, int y)
             CLAMP(tmp_f32,0.0,1.0);
             gfTargetConfusion = tmp_f32;
         }
+        xcase CMD_INTERACT:
+            interactWithNearest();
+        xcase CMD_GAMEPAD_CURSOR:
+            gamepadToggleCursorMode();
+        xcase CMD_GAMEPAD_RELOAD:
+            gamepadReloadConfig();
+        xcase CMD_GAMEPAD_SAVE:
+            gamepadSaveConfig();
+        xcase CMD_GAMEPAD_STATUS:
+            gamepadPrintStatus();
+        xcase CMD_GAMEPAD_TOGGLE:
+            gamepadToggleEnabled();
+        xcase CMD_GAMEPAD_DEBUG:
+            gamepadToggleTrace();
+        xcase CMD_GAMEPAD_SET:
+            gamepadChangeSet(tmp_int);
+        xcase CMD_GAMEPAD_CHAT:
+            gamepadStartChat();
+        xcase CMD_CONSOLE_UI:
+            gamepadToggleConsoleUi();
+        xcase CMD_CONSOLE_MENU:
+            consoleMenuToggle();
+        xcase CMD_CONSOLE_POWERS:
+            consoleBindToggle();
+        xcase CMD_TARGET_MENU:
+            consoleTargetMenu();
+        xcase CMD_TARGET_OR_MENU:
+            consoleTargetOrMenu();
+        xcase CMD_CONSOLE_ENHANCEMENTS:
+            consoleSlotToggle();
+        xcase CMD_CONSOLE_INCARNATES:
+            consoleIncarnateToggle();
+        xcase CMD_CONSOLE_INVENTION:
+            consoleInventionToggle();
+        xcase CMD_CONSOLE_HUD_EDIT:
+            consoleHudEditToggle();
+        xcase CMD_CONSOLE_GAME_MENU:
+            consoleGameMenuToggle();
+        xcase CMD_CONSOLE_INSPIRATIONS:
+            consoleInspirationsToggle();
+        xcase CMD_TEAM_STEP:
+            consoleTeamStep(tmp_str);
+        xcase CMD_CONSOLE_TEAM_LIST:
+            gamepadToggleConsoleTeamList();
+            addSystemChatMsg(gamepadConsoleTeamList() ? "Your team is shown as a list." : "Your team is shown as frames.", INFO_SVR_COM, 0);
+        xcase CMD_CONSOLE_LEAGUE_TEAM:
+            gamepadToggleConsoleLeagueTeam();
+            addSystemChatMsg(gamepadConsoleLeagueTeam() ? "Team frames shown in a league." : "Team frames hidden in a league. Your team is in the league lists.", INFO_SVR_COM, 0);
+        xcase CMD_CONSOLE_TEAM:
+            gamepadToggleConsoleTeam();
+            addSystemChatMsg(gamepadConsoleTeam() ? "Team frames shown." : "Team frames hidden. The Social screen's Team tab still has your team.", INFO_SVR_COM, 0);
+        xcase CMD_CONSOLE_NAV:
+            consoleNavToggle();
+        xcase CMD_CONSOLE_NAV_TAB:
+            consoleNavOpen(tmp_str);
+        xcase CMD_CONSOLE_SOCIAL:
+            consoleSocialToggle();
+        xcase CMD_CONSOLE_COMPACT:
+            gamepadToggleConsoleCompact();
         xcase CMD_MOUSE_LOOK:
         {
              control_state.canlook = tmp_int;
@@ -3828,6 +3975,8 @@ int cmdGameParse(char *str, int x, int y)
         }
         xcase CMD_UNSELECT:
         {
+            int hadTarget = current_target != 0;
+
             if(!current_target){
                 game_state.camera_follow_entity = 0;
             }
@@ -3835,6 +3984,15 @@ int cmdGameParse(char *str, int x, int y)
             current_target = 0;
             gSelectedDBID = 0;
             gSelectedHandle[0] = 0;
+
+            // Escape is bound to this. The console HUD hides the status bar and its Menu button, so with
+            // no target left to clear, a keyboard and mouse player gets the game menu here instead. The
+            // controller's B also clears targets, and has Start for the menu, so it is left out.
+            if (!hadTarget && consoleHudActive() && isMenu(MENU_GAME) && !gamepadUsedWithin(250) &&
+                !contextMenu_IsActive() && window_getMode(WDW_DIALOG) != WINDOW_DISPLAYING)
+            {
+                consoleGameMenuToggle();
+            }
         }
         xcase CMD_LOADMISSIONMAP:
             // FALL THROUGH
@@ -4527,7 +4685,11 @@ int cmdGameParse(char *str, int x, int y)
         xcase CMD_WINDOW_MAP:
             window_openClose( WDW_MAP );
         xcase CMD_WINDOW_MENU:
-             dock_open();
+            // The console HUD hides the status bar, so its own game menu stands in.
+            if (consoleHudActive())
+                consoleGameMenuToggle();
+            else
+                dock_open();
         xcase CMD_CHAT_OPTIONS_MENU:
             {
                 if(tmp_int < 0 || tmp_int >= MAX_CHAT_WINDOWS)
@@ -4642,6 +4804,8 @@ int cmdGameParse(char *str, int x, int y)
                 Entity *e = playerPtr();
                 team_select( e->teamup ? &e->teamup->members : NULL,tmp_int );
             }
+        xcase CMD_TEAM_SELECT_OTHER:
+            team_select_other( tmp_int );
         xcase CMD_PET_SELECT:
             pet_select( tmp_int );
         xcase CMD_PET_SELECT_NAME:

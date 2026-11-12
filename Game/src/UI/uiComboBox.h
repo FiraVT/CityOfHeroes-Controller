@@ -118,6 +118,8 @@ void combobox_setLoc( ComboBox *cb, float x, float y, float z );
 
 // Draws the combobox
 const char *combobox_display( ComboBox *cb );
+// Shuts whichever drop down list is open, for a gamepad's B. True if one was.
+int combobox_closeOpen(void);
 
 // The profile combobox is special, so this function is just for it.
 int combobox_displayRegister( ComboBox *cb, int radius, int color, int back_color, int text_color, char *defaultText, int locked, float screenScaleX, float screenScaleY, int xOffset, int yOffset );

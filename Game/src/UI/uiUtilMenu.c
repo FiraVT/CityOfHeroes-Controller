@@ -12,6 +12,7 @@
 #include "sound/sound.h"
 #include <utilitieslib/utils/timing.h>
 #include "win/input.h"
+#include "win/gamepad.h"
 #include "UI/uiGame.h"
 #include "cmdparse/cmdcommon.h"
 #include "graphics/textureatlas.h"
@@ -432,9 +433,12 @@ int drawNextButton( float x, float y, float z, float scale, int dir, int locked,
 
     if( !locked && mouseClickHit( &box, MS_LEFT ) )
         return TRUE;
-    else
-        return FALSE;
 
+    // Every arrow on the left is Back or Cancel, which is B on a controller.
+    if (dir == DIRECTION_LEFT && !locked && gamepadTakeBack())
+	    return TRUE;
+
+    return FALSE;
 }
 
 #define TITLE_SCALE 1.5f

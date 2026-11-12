@@ -5,6 +5,8 @@
  ***************************************************************************/
 
 #include "win/input.h"
+#include "win/gamepadNav.h"
+#include "UI/uiConsoleHud.h"
 #include "player/player.h"
 
 #include "cmdparse/cmdgame.h"
@@ -554,15 +556,30 @@ void window_Names(void)
 
 //
 //
+// A window drawn inside another screen's box: see window_drawHosted.
+static int s_hostedWindow = -1;
+// The window drawn that way most recently. Its usual call from the window list
+// is skipped meanwhile, since to that call it is a closed window, and a closed
+// window clears its selection and text field focus.
+static int s_lastHostedWindow = -1;
+
 int windowUp( int wdw )
 {
+    if (wdw == s_hostedWindow)
+        return 1;
     return (winDefs[wdw].loc.mode == WINDOW_DISPLAYING || winDefs[wdw].loc.mode == WINDOW_GROWING);
 }
 
 //
 //
+// A window drawn inside another screen's box: see window_drawHosted.
+static float s_hostX, s_hostY, s_hostZ, s_hostWd, s_hostHt, s_hostScale;
+static int s_hostColor, s_hostBackColor;
+
 int window_getMode( int wdw )
 {
+	if (wdw == s_hostedWindow)
+		return WINDOW_DISPLAYING;
     return winDefs[wdw].loc.mode;
 }
 
@@ -1019,6 +1036,26 @@ int window_getDimsEx( int wdw, float *xp, float *yp, float *zp, float* wd, float
     Wdw     *win = wdwGetWindow( wdw );
     WdwBase *loc = &win->loc;
 
+    if (wdw == s_hostedWindow) {
+	    if (xp)
+		    *xp = s_hostX;
+	    if (yp)
+		    *yp = s_hostY;
+	    if (zp)
+		    *zp = s_hostZ;
+	    if (wd)
+		    *wd = s_hostWd;
+	    if (ht)
+		    *ht = s_hostHt;
+	    if (scale)
+		    *scale = s_hostScale;
+	    if (color)
+		    *color = s_hostColor;
+	    if (back_color)
+		    *back_color = s_hostBackColor;
+	    return 1;
+    }
+
     // NaN test
      if( xp && *xp != *xp )
         *xp = 0;
@@ -1149,10 +1186,46 @@ int window_getDims( int wdw, float *xp, float *yp, float *zp, float* wd, float *
     return window_getDimsEx(wdw, xp, yp, zp, wd, ht, scale, color, back_color, false);
 }
 
+void window_drawHosted(int wdw, float x, float y, float z, float wd, float ht,
+		       float scale, int color, int back_color)
+{
+	int savedWindefIndex;
+
+	if (wdw < 0 || wdw >= MAX_WINDOW_COUNT || !winDefs[wdw].code)
+		return;
+
+	s_hostedWindow = wdw;
+	s_hostX = x;
+	s_hostY = y;
+	s_hostZ = z;
+	s_hostWd = wd;
+	s_hostHt = ht;
+	s_hostScale = scale;
+	s_hostColor = color;
+	s_hostBackColor = back_color;
+
+	s_lastHostedWindow = wdw;
+	// Team and League share their code and tell themselves apart by the
+	// window being drawn.
+	savedWindefIndex = gCurrentWindefIndex;
+	gCurrentWindefIndex = wdw;
+	gamepadNavSetWindow(NAV_HOSTED);
+	winDefs[wdw].code();
+	gamepadNavSetWindow(NAV_OVERLAY);
+	gCurrentWindefIndex = savedWindefIndex;
+
+	s_hostedWindow = -1;
+}
+
 //
 //
 void window_setDims( int wdw, float x, float y, float width, float height )
 {
+    // A window sizing itself to its contents while it is drawn inside another screen would carry that
+    // screen's box back to where it normally sits.
+    if (wdw == s_hostedWindow)
+        return;
+
       if( wdw != -1 /*&& winDefs[wdw].loc.mode == WINDOW_DISPLAYING*/ )  //bad window id.
     {
         if( width >= 0 )
@@ -3233,11 +3306,16 @@ int displayWindow( int i )
     {
         int mx = gMouseInpCur.x;
         int my = gMouseInpCur.y;
+	int navWindow = gamepadNavGetWindow();
         if (isLetterBoxMenu())
         {
             reversePointToScreenScalingFactori(&mx, &my);
         }
-         window_checkFrameCollision(i, mx, my);
+	// The resize edges are for the mouse. The pad would land on a
+	// corner before anything inside the window.
+	gamepadNavSetWindow(NAV_IGNORED);
+	window_checkFrameCollision(i, mx, my);
+	gamepadNavSetWindow(navWindow);
     }
 
     if( wdw->id > 0 && !wdw->loc.locked )
@@ -3501,6 +3579,13 @@ static void displayWindowChildren(Wdw * parent, int * collision, int debugLine)
     for( k = 0; k < parent->num_children; k++ )
     {
         int displayChildChildren = 0;
+
+	// A window the console HUD replaces stays hidden docked inside another,
+	// like Team in the chat window.
+	if (parent->children[k].wdw &&
+	    consoleHudSkipsWindow(parent->children[k].wdw->id))
+		continue;
+
         if( parent->children[k].wdw )
         {
             if(parent->children[k].wdw->loc.locked > 2)
@@ -3517,8 +3602,11 @@ static void displayWindowChildren(Wdw * parent, int * collision, int debugLine)
                 startWindowTimer(gCurrentWindefIndex);
                 )
 
+                // The controller finds an attached window's buttons under its own name, not its parent's.
+                gamepadNavSetWindow(parent->children[k].wdw->id);
                 parent->children[k].wdw->code();
                 *collision |= displayWindow( parent->children[k].wdw->id );
+		gamepadNavSetWindow(parent->id);
 
                 if( *collision && game_state.showMouseCoords )
                 {
@@ -3539,7 +3627,9 @@ static void displayWindowChildren(Wdw * parent, int * collision, int debugLine)
                 )
 
                 gCurrentWindefIndex = parent->children[k].wdw->id;
+		gamepadNavSetWindow(parent->children[k].wdw->id);
                 parent->children[k].wdw->code();
+		gamepadNavSetWindow(parent->id);
                 parent->children[k].wdw->loc.locked = 1;
                 window_UpdateServer(parent->id);
 
@@ -3564,6 +3654,46 @@ static void displayWindowChildren(Wdw * parent, int * collision, int debugLine)
 //
 
 
+int consoleHudHidesWindow(int window);
+
+// Windows attached to the tray, like Inspirations, are drawn and dragged
+// through it. While the console HUD hides the tray they stand on their own, or
+// opening one shows nothing and dragging one drags an invisible tray that never
+// lets go. They go back on the tray once it is shown again.
+static U8 s_detachedByHud[MAX_WINDOW_COUNT];
+
+static void consoleHudDetachChildren(int parent)
+{
+	int k;
+
+	for (k = 0; k < winDefs[parent].num_children; k++) {
+		Wdw *child = winDefs[parent].children[k].wdw;
+
+		if (child && child->id < MAX_WINDOW_COUNT &&
+		    child->loc.locked) {
+			window_alignChildren(parent);
+			child->loc.locked = 0;
+			s_detachedByHud[child->id] = 1;
+		}
+	}
+}
+
+static void consoleHudReattachChildren(int parent)
+{
+	int k;
+
+	for (k = 0; k < winDefs[parent].num_children; k++) {
+		Wdw *child = winDefs[parent].children[k].wdw;
+
+		if (child && child->id < MAX_WINDOW_COUNT &&
+		    s_detachedByHud[child->id]) {
+			s_detachedByHud[child->id] = 0;
+			child->loc.locked = 1;
+		}
+	}
+}
+void consoleBindBlockWindows(void);
+
 void serveWindows()
 {
     int j, i, zlist[MAX_WINDOW_COUNT+MAX_CUSTOM_WINDOW_COUNT];
@@ -3576,6 +3706,8 @@ void serveWindows()
     {
         return;
     }
+
+    consoleBindBlockWindows();
 
     gWaitingToEnterGame = 0;
 
@@ -3628,6 +3760,7 @@ void serveWindows()
 
         // hack for multiple chat windows... (MJP, this will be fixed...)
         gCurrentWindefIndex = i;
+	gamepadNavSetWindow(i);
 
         if(stackDepthAtEntry != timing_state.autoStackDepth)
         {
@@ -3650,12 +3783,34 @@ void serveWindows()
                  PERFINFO_AUTO_STOP();
                 continue;
             }
+            if (consoleHudSkipsWindow(i))
+            {
+                PERFINFO_AUTO_STOP();
+                continue;
+            }
+
+            // Drawn inside another screen right now, so it does not also run as a closed window.
+            if (i == s_lastHostedWindow && winDefs[i].loc.mode != WINDOW_DISPLAYING)
+            {
+                s_lastHostedWindow = -1;
+                PERFINFO_AUTO_STOP();
+                continue;
+            }
             if (winDefs[i].code())
             {
                  PERFINFO_AUTO_STOP();
                 return;
             }
         }
+
+	// Their code still runs, because the tray does upkeep there, but no
+	// frame is drawn.
+	if (consoleHudHidesWindow(i)) {
+		consoleHudDetachChildren(i);
+		PERFINFO_AUTO_STOP();
+		continue;
+	}
+	consoleHudReattachChildren(i);
 
         switch( winDefs[i].loc.mode )
         {
@@ -3731,6 +3886,8 @@ void serveWindows()
         
         PERFINFO_AUTO_STOP(); // Matches the PERFINFO_AUTO_START_STATIC above that calls windows_GetNameByNumber.
     }
+
+    gamepadNavSetWindow(NAV_OVERLAY);
 
     // In the login menu, make the options menu acts as modal dialogs
     if (forceModal && anyDisplaying)

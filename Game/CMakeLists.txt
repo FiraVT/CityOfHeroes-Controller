@@ -443,6 +443,17 @@ set(Game_SOURCES
 	src/UI/uiComment.c
 	src/UI/uiCompass.c
 	src/UI/uiConsole.c
+	src/UI/uiConsoleBind.c
+	src/UI/uiConsoleGameMenu.c
+	src/UI/uiConsoleHud.c
+	src/UI/uiConsoleHudLayout.c
+	src/UI/uiConsoleIncarnate.c
+	src/UI/uiConsoleInsp.c
+	src/UI/uiConsoleInvention.c
+	src/UI/uiConsoleNav.c
+	src/UI/uiConsoleSlot.c
+	src/UI/uiConsoleTeam.c
+	src/UI/uiConsoleTrade.c
 	src/UI/uiContact.c
 	src/UI/uiContactDialog.c
 	src/UI/uiContactFinder.c
@@ -564,7 +575,9 @@ set(Game_SOURCES
 	src/UI/uiWindows_init.c
 	src/validateFiles.c
 	src/win/hwlight.c
+	src/win/gamepad.c
 	src/win/gamepadDevice.c
+	src/win/gamepadNav.c
 	src/win/input.c
 	src/win/win_cursor.c
 	src/win/win_init.c
@@ -1023,6 +1036,8 @@ set(Game_HEADERS
 	src/UI/uiComment.h
 	src/UI/uiCompass.h
 	src/UI/uiConsole.h
+	src/UI/uiConsoleHud.h
+	src/UI/uiConsoleHudInternal.h
 	src/UI/uiContact.h
 	src/UI/uiContactDialog.h
 	src/UI/uiContactFinder.h
@@ -1145,7 +1160,9 @@ set(Game_HEADERS
 	src/UI/uiWindows.h
 	src/UI/uiWindows_init.h
 	src/win/hwlight.h
+	src/win/gamepad.h
 	src/win/gamepadDevice.h
+	src/win/gamepadNav.h
 	src/win/input.h
 	src/win/win_cursor.h
 	src/win/win_init.h

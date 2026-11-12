@@ -8,5 +8,6 @@
 //
 int dock_draw();
 void dock_open();
+void dock_openAtMouse(void);
 
 #endif

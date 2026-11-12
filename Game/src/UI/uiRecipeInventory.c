@@ -74,6 +74,7 @@
 #include "UI/uiInfo.h"
 #include "uiSlider.h"
 #include "UI/uiRecipeInventory.h"
+#include "UI/uiConsoleHud.h"
 #include "UI/uiIncarnate.h"
 #include <utilitieslib/utils/SimpleParser.h>
 
@@ -1565,6 +1566,25 @@ float uiMeritRecipeDraw(treeRecipeDisplayState *pState, float x, float y, float 
     return textHeight + spaceBetweenNodes*scale;;
 }
 
+// Asks the server to make one Incarnate recipe, the same request the window's
+// Create button sends. Returns 0 without sending when the character does not
+// have what it takes.
+int uiIncarnateCreate(const DetailRecipe *recipe)
+{
+	Entity *e = playerPtr();
+
+	if (!e || !e->pchar || !recipe ||
+	    !character_DetailRecipeCreatable(e->pchar, recipe, NULL, true, 0,
+					     0))
+		return 0;
+
+	START_INPUT_PACKET(pak, CLIENTINP_INCARNATE_CREATE);
+	pktSendString(pak, recipe->pchName);
+	pktSendBitsAuto(pak, rewardLevel);
+	END_INPUT_PACKET;
+	return 1;
+}
+
 float uiIncarnateRecipeDraw(treeRecipeDisplayState *pState, float x, float y, float z, float width, float scale)
 { 
     float spaceBetweenNodes = SPACE_BETWEEN_NODES;
@@ -1956,7 +1976,7 @@ int recipeInventoryWindow()
 
         if ((window_getMode( WDW_RECIPEINVENTORY ) == WINDOW_SHRINKING ||
                 window_getMode( WDW_RECIPEINVENTORY ) == WINDOW_DOCKED) && 
-            e && e->pl && e->pl->workshopInteracting[0] != 0 && closeTimer < 1)
+            e && e->pl && e->pl->workshopInteracting[0] != 0 && closeTimer < 1 && !consoleInventionHoldsTable())
         {
             workshop_SendClose();
             closeTimer = 20;

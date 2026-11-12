@@ -47,6 +47,7 @@ typedef enum MovementInputSet
 {
     MOVE_INPUT_CMD,
     MOVE_INPUT_OTHER,
+    MOVE_INPUT_GAMEPAD,
     MOVE_INPUT_COUNT,
 } MovementInputSet;
 
