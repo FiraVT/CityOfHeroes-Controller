@@ -2104,6 +2104,12 @@ int WINAPI WinMain ( HINSTANCE hInstance, HINSTANCE hPrevInstance,
     int        noExceptionHandler=0;
     FILE    *file;
 
+    // Windows flags the client as hung about 5 seconds after it loses focus,
+    // even while the main loop is running and reading messages. It then covers
+    // the window with a white ghost window, and a click on the ghost ends the
+    // process. Keep the real window on screen instead.
+    DisableProcessWindowsGhosting();
+
     memCheckInit();
 
     argv[0] = windowName;
