@@ -10,6 +10,7 @@ include(dependencies/Cg)
 include(dependencies/NvParse)
 include(dependencies/AlienFx)
 include(dependencies/NvCpl)
+include(dependencies/SDL3)
 
 set(Game_SOURCES
 	../Common/account/AccountCatalog.c
@@ -1223,7 +1224,7 @@ target_link_libraries(Game PRIVATE
 	Common UtilitiesLib FreeType::FreeType GLEW::GLEW JPEG::JPEG
 	jpge::jpgd Vorbis::vorbisfile PhysX::Loader PhysX::Cooking
 	NvDxt::NvDxt CubeMapGen::CubeMapGen Cg::Cg Cg::CgGL
-	NvParse::NvParse AlienFX::AlienFX NvCpl::NvCpl
+	NvParse::NvParse AlienFX::AlienFX NvCpl::NvCpl SDL3::SDL3-static
 	opengl32 glu32 ddraw dinput8 dsound winmm dxguid imm32)
 target_compile_definitions(Game PRIVATE
 	CLIENT USEZLIB _WINDOWS _MBCS SUBSTANCE_PLATFORM_OGLCG
