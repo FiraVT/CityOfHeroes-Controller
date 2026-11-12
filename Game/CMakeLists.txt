@@ -564,6 +564,7 @@ set(Game_SOURCES
 	src/UI/uiWindows_init.c
 	src/validateFiles.c
 	src/win/hwlight.c
+	src/win/gamepadDevice.c
 	src/win/input.c
 	src/win/win_cursor.c
 	src/win/win_init.c
@@ -1144,6 +1145,7 @@ set(Game_HEADERS
 	src/UI/uiWindows.h
 	src/UI/uiWindows_init.h
 	src/win/hwlight.h
+	src/win/gamepadDevice.h
 	src/win/input.h
 	src/win/win_cursor.h
 	src/win/win_init.h

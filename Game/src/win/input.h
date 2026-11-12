@@ -270,6 +270,11 @@
 #define INP_JOYSTICK3_LEFT    0x9A
 #define INP_JOYSTICK3_RIGHT    0x9B
 
+// Gamepad triggers, pressed past half travel. Read through SDL3, see
+// win/gamepad.h. These scan codes are unused by DirectInput keyboards.
+#define INP_LTRIGGER 0x6A
+#define INP_RTRIGGER 0x6B
+
 #define INP_KEY_LAST        0xED
 
 // Mouse buttons

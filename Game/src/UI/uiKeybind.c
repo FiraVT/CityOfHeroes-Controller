@@ -319,6 +319,9 @@ SwitchToken    key_names[] =
     SW_NAME(INP_JOYSTICK3_LEFT)
     SW_NAME(INP_JOYSTICK3_RIGHT)
 
+    SW_NAME(INP_LTRIGGER)
+    SW_NAME(INP_RTRIGGER)
+
     SW_NAME2(INP_MOUSE_CHORD,            "MouseChord")
     SW_NAME2(INP_LCLICK,                "LeftClick")
     SW_NAME2(INP_MCLICK,                "MiddleClick")

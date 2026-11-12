@@ -2,6 +2,7 @@
 #include <utilitieslib/utils/wininclude.h>
 #include "graphics/font.h" // temporary
 #include "win/input.h"
+#include "win/gamepadDevice.h"
 #include "win/win_init.h"
 #include <ctype.h>
 #include <utilitieslib/utils/timing.h>
@@ -50,7 +51,6 @@ int shiftKeyState = 0;
 LPDIRECTINPUT8            DirectInput8; 
 LPDIRECTINPUTDEVICE8    Keyboard;
 LPDIRECTINPUTDEVICE8    gMouse;
-LPDIRECTINPUTDEVICE8    gJoystick;
 
 #define KEYBOARD_BUFFER_SIZE 128
 #define MOUSE_BUFFER_SIZE  256
@@ -196,111 +196,31 @@ void MouseShutdown( void )
     } 
 }
 
-BOOL CALLBACK EnumJoysticksCallback( const DIDEVICEINSTANCE* pdidInstance,    VOID* pContext )
+/*
+ * Pads are read through SDL3 (win/gamepadDevice.c), not DirectInput. See
+ * gamepadDevice.h for why. inpJoystickState() turns the reading into the
+ * same INP_* key codes DirectInput used, so binds keep working.
+ */
+static int joystick_started;
+
+static void JoystickStartup(void)
 {
-    HRESULT hr;
-
-    // Obtain an interface to the enumerated joystick.
-    hr = DirectInput8->lpVtbl->CreateDevice( DirectInput8, &pdidInstance->guidInstance, &gJoystick, NULL );
-
-    // If it failed, then we can't use this joystick. (Maybe the user unplugged
-    // it while we were in the middle of enumerating it.)
-    if( FAILED(hr) ) 
-        return DIENUM_CONTINUE;
-
-    // Stop enumeration. Note: we're just taking the first joystick we get. You
-    // could store all the enumerated joysticks and let the user pick.
-    return DIENUM_STOP;
+	joystick_started = !gamepadDeviceStartup();
 }
 
-BOOL CALLBACK EnumObjectsCallback( const DIDEVICEOBJECTINSTANCE* pdidoi,  VOID* pContext )
+static void JoystickShutdown(void)
 {
-    HWND hDlg = (HWND)pContext;
-
-    static int nSliderCount = 0;  // Number of returned slider controls
-    static int nPOVCount = 0;     // Number of returned POV controls
-
-    // For axes that are returned, set the DIPROP_RANGE property for the
-    // enumerated axis in order to scale min/max values.
-    if( pdidoi->dwType & DIDFT_AXIS )
-    {
-        DIPROPRANGE diprg; 
-        diprg.diph.dwSize       = sizeof(DIPROPRANGE); 
-        diprg.diph.dwHeaderSize = sizeof(DIPROPHEADER); 
-        diprg.diph.dwHow        = DIPH_BYID; 
-        diprg.diph.dwObj        = pdidoi->dwType; // Specify the enumerated axis
-        diprg.lMin              = -1000; 
-        diprg.lMax              = +1000; 
-
-        // Set the range for the axis
-        if( FAILED( gJoystick->lpVtbl->SetProperty( gJoystick, DIPROP_RANGE, &diprg.diph ) ) ) 
-            return DIENUM_STOP;
-
-    }
-
-    return DIENUM_CONTINUE;
+	gamepadDeviceShutdown();
+	joystick_started = 0;
 }
-
-int JoystickStartup()
-{
-    HRESULT hr;
-
-    // Look for a simple joystick we can use for this sample program.
-    if( FAILED( hr = DirectInput8->lpVtbl->EnumDevices( DirectInput8, DI8DEVCLASS_GAMECTRL, EnumJoysticksCallback, NULL, DIEDFL_ATTACHEDONLY ) ) )
-        return 1;
-
-    if( !gJoystick )
-        return 1;
-
-    // Set the data format to "simple joystick" - a predefined data format 
-    //
-    // A data format specifies which controls on a device we are interested in,
-    // and how they should be reported. This tells DInput that we will be
-    // passing a DIJOYSTATE2 structure to IDirectInputDevice::GetDeviceState().
-    if( FAILED( hr = gJoystick->lpVtbl->SetDataFormat( gJoystick, &c_dfDIJoystick2 ) ) )
-        return 1;
-
-    // Set the cooperative level to let DInput know how this device should
-    // interact with the system and with other DInput applications.
-    if( FAILED( hr = gJoystick->lpVtbl->SetCooperativeLevel( gJoystick, hwnd, DISCL_EXCLUSIVE | DISCL_FOREGROUND ) ) )
-        return 1;
-
-    // Enumerate the joystick objects. The callback function enabled user
-    // interface elements for objects that are found, and sets the min/max
-    // values property for discovered axes.
-    if( FAILED( hr = gJoystick->lpVtbl->EnumObjects( gJoystick, EnumObjectsCallback, (VOID*)hwnd, DIDFT_ALL ) ) )
-        return 1;
-
-    return 0;
-}
-
-void JoystickShutdown()
-{
-    // Unacquire the device one last time just in case 
-    // the app tried to exit while the device is still acquired.
-    if( gJoystick ) 
-        gJoystick->lpVtbl->Unacquire( gJoystick );
-
-    // Release any DirectInput objects.
-    if( gJoystick )
-    {
-        gJoystick->lpVtbl->Release( gJoystick );
-        gJoystick = NULL;
-    }
-}
-
 
 // disable or enable joystick, if necessary
 void JoystickEnable()
 {
-    if(!gJoystick && optionGet(kUO_EnableJoystick))
-    {
-        JoystickStartup();
-    }
-    else if(gJoystick && !optionGet(kUO_EnableJoystick) )
-    {
-        JoystickShutdown();
-    }
+	if (!joystick_started && optionGet(kUO_EnableJoystick))
+		JoystickStartup();
+	else if (joystick_started && !optionGet(kUO_EnableJoystick))
+		JoystickShutdown();
 }
 
 
@@ -630,185 +550,86 @@ void inpKeyboardUpdate()
     }
 }
 
-int dxJoystickToInpKeyMapping[][2] = {
-    {DIJOFS_BUTTON1, INP_JOY1},
-    {DIJOFS_BUTTON2, INP_JOY2},
-    {DIJOFS_BUTTON3, INP_JOY3},
-    {DIJOFS_BUTTON4, INP_JOY4},
-    {DIJOFS_BUTTON5, INP_JOY5},
-    {DIJOFS_BUTTON6, INP_JOY6},
-    {DIJOFS_BUTTON7, INP_JOY7},
-    {DIJOFS_BUTTON8, INP_JOY8},
-    {DIJOFS_BUTTON9, INP_JOY9},
-    {DIJOFS_BUTTON10, INP_JOY10},
-    {DIJOFS_BUTTON11, INP_JOY11},
-    {DIJOFS_BUTTON12, INP_JOY12},
-    {DIJOFS_BUTTON13, INP_JOY13},
-    {DIJOFS_BUTTON14, INP_JOY14},
-    {DIJOFS_BUTTON15, INP_JOY15},
-    {DIJOFS_BUTTON16, INP_JOY16},
-    {DIJOFS_BUTTON17, INP_JOY17},
-    {DIJOFS_BUTTON18, INP_JOY18},
-    {DIJOFS_BUTTON19, INP_JOY19},
-    {DIJOFS_BUTTON20, INP_JOY20},
-    {DIJOFS_BUTTON21, INP_JOY21},
-    {DIJOFS_BUTTON22, INP_JOY22},
-    {DIJOFS_BUTTON23, INP_JOY23},
-    {DIJOFS_BUTTON24, INP_JOY24},
-    {DIJOFS_BUTTON25, INP_JOY25},
+/* Key code for each PadButton, in PadButton order. */
+static const int gamepadButtonKeys[PAD_BUTTON_COUNT] = {
+	/*
+	 * A, B, X, Y, LB, RB, Back, Start and the stick clicks keep the
+	 * JOY1-JOY10 numbers DirectInput gave an Xbox pad, so existing
+	 * binds still mean the same buttons.
+	 */
+	INP_JOY1,	  INP_JOY2,	   INP_JOY3,
+	INP_JOY4,	  INP_JOY5,	   INP_JOY6,
+	INP_JOY7,	  INP_JOY8,	   INP_JOY9,
+	INP_JOY10,	  INP_JOY11, /* Guide */
+	INP_JOY12,		     /* Share / Capture / Mic */
+	INP_JOY13,	  INP_JOY14,	   INP_JOY15,
+	INP_JOY16, /* paddles */
+	INP_JOY17, /* touchpad click */
+	INP_JOYPAD_UP,	  INP_JOYPAD_DOWN, INP_JOYPAD_LEFT,
+	INP_JOYPAD_RIGHT,
 };
 
-enum
+/* Half of full deflection, as DirectInput's 500 of 1000 was. */
+#define GAMEPAD_KEY_THRESHOLD 16384
+
+static void inpGamepadKey(int key, int down, int curTime)
 {
-    DXDIR_UP,
-    DXDIR_DOWN,
-    DXDIR_LEFT,
-    DXDIR_RIGHT,
-    DXDIR_NUM,
-};
+	if (down)
+		inpUpdateKey(key, 1, curTime);
+	else
+		inpUpdateKeyClearIfActive(key, curTime);
+}
 
-int dxPovDefines[][4] = {
-    {INP_JOYPAD_UP,INP_JOYPAD_DOWN,INP_JOYPAD_LEFT,INP_JOYPAD_RIGHT},
-    {INP_POV1_UP,INP_POV1_DOWN,INP_POV1_LEFT,INP_POV1_RIGHT},
-    {INP_POV2_UP,INP_POV2_DOWN,INP_POV2_LEFT,INP_POV2_RIGHT},
-    {INP_POV3_UP,INP_POV3_DOWN,INP_POV3_LEFT,INP_POV3_RIGHT},
-};
+/*
+ * Press or release the four direction keys of one stick. @up, @down,
+ * @left and @right are INP_* codes.
+ */
+static void inpGamepadStick(S16 x, S16 y, int up, int down, int left, int right,
+			    int curTime)
+{
+	inpGamepadKey(left, x < -GAMEPAD_KEY_THRESHOLD, curTime);
+	inpGamepadKey(right, x > GAMEPAD_KEY_THRESHOLD, curTime);
+	inpGamepadKey(up, y < -GAMEPAD_KEY_THRESHOLD, curTime);
+	inpGamepadKey(down, y > GAMEPAD_KEY_THRESHOLD, curTime);
+}
 
 void inpJoystickState()
 {
-    HRESULT     hr;
-    DIJOYSTATE2 js;           // DInput joystick state 
-    int i;
-    const S32 curTime = timeGetTime();
+	const S32 curTime = timeGetTime();
+	PadState pad;
+	int i;
 
-    static int joystick_sensitivity = 500;
+	if (!joystick_started)
+		return;
 
-    if( NULL == gJoystick ) 
-        return;
+	gamepadDeviceRead(&pad);
 
-    // Poll the device to read the current state
-    hr = gJoystick->lpVtbl->Poll( gJoystick ); 
-    if( FAILED(hr) )  
-    {
-        // DInput is telling us that the input stream has been
-        // interrupted. We aren't tracking any state between polls, so
-        // we don't have any special reset that needs to be done. We
-        // just re-acquire and try again.
-        hr = gJoystick->lpVtbl->Acquire( gJoystick );
-        while( hr == DIERR_INPUTLOST ) 
-            hr = gJoystick->lpVtbl->Acquire( gJoystick );
+	/* Release everything when the pad goes away; all fields are 0. */
+	for (i = 0; i < PAD_BUTTON_COUNT; i++)
+		inpGamepadKey(gamepadButtonKeys[i], pad.buttons[i], curTime);
 
-        // hr may be DIERR_OTHERAPPHASPRIO or other errors.  This
-        // may occur when the app is minimized or in the process of 
-        // switching, so just try again later 
-        return; 
-    }
+	inpGamepadStick(pad.axes[PAD_AXIS_LEFTX], pad.axes[PAD_AXIS_LEFTY],
+			INP_JOYSTICK1_UP, INP_JOYSTICK1_DOWN,
+			INP_JOYSTICK1_LEFT, INP_JOYSTICK1_RIGHT, curTime);
 
-    // Get the input's device state
-    if( FAILED( hr = gJoystick->lpVtbl->GetDeviceState( gJoystick, sizeof(DIJOYSTATE2), &js ) ) )
-        return; // The device should have been acquired during the Poll()
+	/*
+	 * DirectInput reported the same axes as both JOYSTICK2 and
+	 * JOYSTICK3, and the shipped Joystick keybind profile turns with
+	 * joystick3. The right stick drives both so those binds still work.
+	 */
+	inpGamepadStick(pad.axes[PAD_AXIS_RIGHTX], pad.axes[PAD_AXIS_RIGHTY],
+			INP_JOYSTICK2_UP, INP_JOYSTICK2_DOWN,
+			INP_JOYSTICK2_LEFT, INP_JOYSTICK2_RIGHT, curTime);
+	inpGamepadStick(pad.axes[PAD_AXIS_RIGHTX], pad.axes[PAD_AXIS_RIGHTY],
+			INP_JOYSTICK3_UP, INP_JOYSTICK3_DOWN,
+			INP_JOYSTICK3_LEFT, INP_JOYSTICK3_RIGHT, curTime);
 
-    // Convert joystick state to keyscan codes system can read
-
-    // XY axis (Joystick 1)
-    if( js.lX < -joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK1_LEFT, 1, curTime);
-    else 
-        inpUpdateKeyClearIfActive(INP_JOYSTICK1_LEFT, curTime);
-
-    if( js.lX > joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK1_RIGHT, 1, curTime);
-    else 
-        inpUpdateKeyClearIfActive(INP_JOYSTICK1_RIGHT, curTime);
-
-    if( js.lY < -joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK1_UP, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK1_UP, curTime);
-
-    if( js.lY > joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK1_DOWN, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK1_DOWN, curTime);
-
-    // Z/Zrot axis (Joystick 2)
-    if( js.lZ < -joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK2_LEFT, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK2_LEFT, curTime);
-
-    if( js.lZ > joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK2_RIGHT, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK2_RIGHT, curTime);
-
-    if( js.lRz < -joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK2_UP, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK2_UP, curTime);
-
-    if( js.lRz > joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK2_DOWN, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK2_DOWN, curTime);
-
-    // Xrot/Yrot axis (Joystick 3?)
-    if( js.lZ < -joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK3_LEFT, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK3_LEFT, curTime);
-
-    if( js.lZ > joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK3_RIGHT, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK3_RIGHT, curTime);
-
-    if( js.lRz < -joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK3_UP, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK3_UP, curTime);
-
-    if( js.lRz > joystick_sensitivity )
-        inpUpdateKey(INP_JOYSTICK3_DOWN, 1, curTime);
-    else
-        inpUpdateKeyClearIfActive(INP_JOYSTICK3_DOWN, curTime);
-
-    
-    // Pov[0] corresponds to the numpad: 0 = up, 9000 = right, 18000 = down, 27000 = left
-    // I don't know where these insane numbers come from, this was by trial and error
-    for( i = 0; i < DXDIR_NUM; i++ )
-    {
-         if( ((int)js.rgdwPOV[i] >= 0 && (int)js.rgdwPOV[i] <= 4500) || ((int)js.rgdwPOV[i] >= 31500) )
-            inpUpdateKey(dxPovDefines[i][DXDIR_UP], 1, curTime);
-        else 
-            inpUpdateKeyClearIfActive(dxPovDefines[i][DXDIR_UP], curTime);
-
-        if( (int)js.rgdwPOV[i] >= 4500 && (int)js.rgdwPOV[i] <= 13500 )
-            inpUpdateKey(dxPovDefines[i][DXDIR_RIGHT], 1, curTime);
-        else 
-            inpUpdateKeyClearIfActive(dxPovDefines[i][DXDIR_RIGHT], curTime);
-
-        if( (int)js.rgdwPOV[i] >= 13500 && (int)js.rgdwPOV[i] <= 22500 )
-            inpUpdateKey(dxPovDefines[i][DXDIR_DOWN], 1, curTime);
-        else 
-            inpUpdateKeyClearIfActive(dxPovDefines[i][DXDIR_DOWN], curTime);
-
-        if( (int)js.rgdwPOV[i] >= 22500 )
-            inpUpdateKey(dxPovDefines[i][DXDIR_LEFT], 1, curTime);
-        else
-            inpUpdateKeyClearIfActive(dxPovDefines[i][DXDIR_LEFT], curTime);
-    }
-
-    // Note: ignoring rglSlider[0], rglSlider[1]
-
-    //Now onto the buttons that are pressed
-    for( i = 0; i < 24; i++ )
-    {
-        if ( js.rgbButtons[i] & 0x80 )
-            inpUpdateKey(dxJoystickToInpKeyMapping[i][1], 1, curTime);
-        else
-            inpUpdateKeyClearIfActive(dxJoystickToInpKeyMapping[i][1], curTime);
-    }
+	inpGamepadKey(INP_LTRIGGER,
+		      pad.axes[PAD_AXIS_LTRIGGER] > GAMEPAD_KEY_THRESHOLD,
+		      curTime);
+	inpGamepadKey(INP_RTRIGGER,
+		      pad.axes[PAD_AXIS_RTRIGGER] > GAMEPAD_KEY_THRESHOLD,
+		      curTime);
 }
 
 
