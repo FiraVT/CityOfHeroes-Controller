@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -92,6 +93,7 @@ typedef struct GamepadSettings {
 	F32 consoleTeamList;
 	F32 swapTargetSides;
 	F32 autoTarget;
+	F32 buttonStyle;
 } GamepadSettings;
 
 typedef struct GamepadSetting {
@@ -137,6 +139,7 @@ static ParseTable settingRegistryInfo[] = {
 	{ "console_team_list", TOK_F32(GamepadSettings, consoleTeamList, 0) },
 	{ "swap_target_sides", TOK_F32(GamepadSettings, swapTargetSides, 0) },
 	{ "auto_target", TOK_F32(GamepadSettings, autoTarget, 0) },
+	{ "button_style", TOK_F32(GamepadSettings, buttonStyle, 0) },
 	{ "", 0, 0 }
 };
 
@@ -181,6 +184,9 @@ static const GamepadSetting settingTable[] = {
 	{ "console_ui", &settings.consoleUi,
 	  "1 uses the console HUD instead of the standard tray. /console_ui "
 	  "switches it" },
+	{ "button_style", &settings.buttonStyle,
+	  "Button names shown: 0 from the pad, 1 Xbox, 2 PlayStation, 3 "
+	  "Nintendo" },
 	{ "swap_target_sides", &settings.swapTargetSides,
 	  "1 swaps the bumpers, so LB targets foes and RB targets friends" },
 	{ "auto_target", &settings.autoTarget,
@@ -373,6 +379,7 @@ static void setDefaultSettings(void)
 	settings.consoleTeamList = 0;
 	settings.swapTargetSides = 0;
 	settings.autoTarget = 1;
+	settings.buttonStyle = GP_STYLE_AUTO;
 }
 
 static void clampSettings(void)
@@ -387,6 +394,8 @@ static void clampSettings(void)
 	settings.lookCurve = clampFloat(settings.lookCurve, 1, 5);
 	settings.cursorSpeed = clampFloat(settings.cursorSpeed, 50, 8000);
 	settings.rumble = clampFloat(settings.rumble, 0, 1);
+	settings.buttonStyle = clampFloat(floorf(settings.buttonStyle + 0.5f),
+					  GP_STYLE_AUTO, GP_STYLE_NINTENDO);
 }
 
 static int modifierBit(int button)
@@ -2235,6 +2244,146 @@ int gamepadGetFocusBox(float *left, float *top, float *right, float *bottom)
 int gamepadOpenWindowCount(void)
 {
 	return openMenuCount;
+}
+
+GamepadButtonStyle gamepadButtonStyle(void)
+{
+	if (settings.buttonStyle != GP_STYLE_AUTO)
+		return (GamepadButtonStyle)settings.buttonStyle;
+
+	switch (gamepadDeviceFamily()) {
+	case PAD_FAMILY_PLAYSTATION:
+		return GP_STYLE_PLAYSTATION;
+	case PAD_FAMILY_NINTENDO:
+		return GP_STYLE_NINTENDO;
+	default:
+		return GP_STYLE_XBOX;
+	}
+}
+
+const char *gamepadButtonLabel(int button)
+{
+	// In GamepadButton order: A B X Y Back Start L3 R3 LB RB, the D-pad, LT
+	// RT, then the right stick.
+	static const char *labels[][GP_BUTTON_COUNT] = {
+		[GP_STYLE_XBOX] = { "A",	  "B",		"X",
+				    "Y",	  "Back",	"Start",
+				    "L3",	  "R3",		"LB",
+				    "RB",	  "Up",		"Down",
+				    "Left",	  "Right",	"LT",
+				    "RT",	  "Stick up",	"Stick down",
+				    "Stick left", "Stick right" },
+		[GP_STYLE_PLAYSTATION] = { "Cross",	 "Circle",
+					   "Square",	 "Triangle",
+					   "Share",	 "Options",
+					   "L3",	 "R3",
+					   "L1",	 "R1",
+					   "Up",	 "Down",
+					   "Left",	 "Right",
+					   "L2",	 "R2",
+					   "Stick up",	 "Stick down",
+					   "Stick left", "Stick right" },
+		// Nintendo prints A on the right and B at the bottom.
+		[GP_STYLE_NINTENDO] = { "B",	      "A",
+					"Y",	      "X",
+					"Minus",      "Plus",
+					"LS",	      "RS",
+					"L",	      "R",
+					"Up",	      "Down",
+					"Left",	      "Right",
+					"ZL",	      "ZR",
+					"Stick up",   "Stick down",
+					"Stick left", "Stick right" },
+	};
+
+	if (button < 0 || button >= GP_BUTTON_COUNT)
+		return "";
+	return labels[gamepadButtonStyle()][button];
+}
+
+const char *gamepadModifierLabel(int modifier)
+{
+	switch (modifier) {
+	case GP_MOD_LT:
+		return gamepadButtonLabel(GP_LT);
+	case GP_MOD_RT:
+		return gamepadButtonLabel(GP_RT);
+	case GP_MOD_LB:
+		return gamepadButtonLabel(GP_LB);
+	case GP_MOD_RB:
+		return gamepadButtonLabel(GP_RB);
+	}
+	return "";
+}
+
+const char *gamepadLabelText(const char *text)
+{
+	static const struct {
+		const char *word;
+		int button;
+	} words[] = {
+		{ "LB", GP_LB },     { "RB", GP_RB },	    { "LT", GP_LT },
+		{ "RT", GP_RT },     { "L3", GP_L3 },	    { "R3", GP_R3 },
+		{ "Back", GP_BACK }, { "Start", GP_START },
+	};
+	// Prompts are measured and then drawn, so a few results are kept.
+	static char buffers[8][160];
+	static int next;
+	char *out;
+	size_t used = 0;
+	const char *p = text;
+
+	if (!text || gamepadButtonStyle() == GP_STYLE_XBOX)
+		return text;
+
+	out = buffers[next];
+	next = (next + 1) % ARRAY_SIZE(buffers);
+
+	while (*p && used + 1 < sizeof(buffers[0])) {
+		const char *replacement = NULL;
+		size_t length = 0;
+		int i;
+
+		if (p == text || !isalnum((unsigned char)p[-1])) {
+			for (i = 0; i < ARRAY_SIZE(words); i++) {
+				size_t n = strlen(words[i].word);
+
+				if (!strncmp(p, words[i].word, n) &&
+				    !isalnum((unsigned char)p[n])) {
+					replacement = gamepadButtonLabel(
+						words[i].button);
+					length = n;
+					break;
+				}
+			}
+		}
+
+		if (replacement) {
+			size_t n = strlen(replacement);
+
+			if (used + n + 1 > sizeof(buffers[0]))
+				break;
+			memcpy(out + used, replacement, n);
+			used += n;
+			p += length;
+		} else {
+			out[used++] = *p++;
+		}
+	}
+	out[used] = '\0';
+	return out;
+}
+
+const char *gamepadKeyTextSuffix(void)
+{
+	switch (gamepadButtonStyle()) {
+	case GP_STYLE_PLAYSTATION:
+		return "_PS";
+	case GP_STYLE_NINTENDO:
+		return "_NS";
+	default:
+		return "";
+	}
 }
 
 int gamepadConsoleCompact(void)

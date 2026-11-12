@@ -142,6 +142,32 @@ int gamepadPointerHidden(void);
 int gamepadGetFocusBox(float *left, float *top, float *right, float *bottom);
 int gamepadOpenWindowCount(void);
 
+// Whose names the buttons are shown with. The button_style setting picks one,
+// or GP_STYLE_AUTO follows the pad plugged in.
+typedef enum GamepadButtonStyle {
+	GP_STYLE_AUTO,
+	GP_STYLE_XBOX,
+	GP_STYLE_PLAYSTATION,
+	GP_STYLE_NINTENDO,
+} GamepadButtonStyle;
+
+// The style in use: never GP_STYLE_AUTO.
+GamepadButtonStyle gamepadButtonStyle(void);
+// What the pad in use has printed on @button, such as "A", "Cross", "L1" or
+// "ZR", for prompts and shortcuts. Buttons are named by where they sit, so the
+// bottom face button, GP_A, is "B" on a Nintendo pad.
+const char *gamepadButtonLabel(int button);
+// The same for a GP_MOD_* bit.
+const char *gamepadModifierLabel(int modifier);
+// @text with the Xbox button names in it, as whole words (LB, RB, LT, RT, L3,
+// R3, Back, Start), changed to the style in use: "LB / RB Windows" becomes
+// "L1 / R1 Windows". Only for text that names buttons, not text where "Back"
+// is a verb. The result lasts until a few more calls have been made.
+const char *gamepadLabelText(const char *text);
+// Added to a key's message name for the style's own wording, as "INP_JOY1"
+// becomes "INP_JOY1_PS": "", "_PS" or "_NS".
+const char *gamepadKeyTextSuffix(void);
+
 int gamepadConsoleCompact(void);
 void gamepadToggleConsoleCompact(void);
 // Whether the console HUD shows the team frames, and switching them on or off.

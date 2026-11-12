@@ -1372,7 +1372,8 @@ void drawInvScreen(Entity *e, int width, int height, F32 hudScale)
 			     (INV_TAB_COUNT - 1) * tabStep / 2;
 
 		drawText(&game_12, firstX - 100 * hudScale, tabY, BIND_Z + 4,
-			 hudScale, 0xffffffc0, CENTER_X | CENTER_Y, "LB");
+			 hudScale, 0xffffffc0, CENTER_X | CENTER_Y,
+			 gamepadButtonLabel(GP_LB));
 		for (i = 0; i < INV_TAB_COUNT; i++) {
 			F32 x = firstX + i * tabStep;
 
@@ -1390,7 +1391,7 @@ void drawInvScreen(Entity *e, int width, int height, F32 hudScale)
 			 firstX + (INV_TAB_COUNT - 1) * tabStep +
 				 100 * hudScale,
 			 tabY, BIND_Z + 4, hudScale, 0xffffffc0,
-			 CENTER_X | CENTER_Y, "RB");
+			 CENTER_X | CENTER_Y, gamepadButtonLabel(GP_RB));
 	}
 
 	if (invTab == INV_TAB_BUILD) {

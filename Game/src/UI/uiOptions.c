@@ -499,11 +499,36 @@ static int s_gpLookSpeed;
 static int s_gpCursorSpeed;
 static float s_gpMoveDeadzone;
 static float s_gpLookDeadzone;
+static int s_gpButtonStyle;
 
 static SliderParam s_paramGamepadLookSpeed = { 60.0f, 200.0f, 600.0f, 1.0f };
 static SliderParam s_paramGamepadCursorSpeed = { 300.0f, 1100.0f, 3000.0f,
 						 1.0f };
 static SliderParam s_paramGamepadDeadzone = { 0.0f, 0.18f, 0.5f, 1.0f };
+
+// Button Style: whose button names the HUD and keymapping use. Auto names the
+// style the plugged in pad was found to be.
+static char *DisplayGamepadButtonStyle(void *unused)
+{
+	static const char *names[] = { "Xbox", "PlayStation", "Nintendo" };
+	static char ach[128];
+	const char *shown = names[gamepadButtonStyle() - GP_STYLE_XBOX];
+
+	strcpy(ach, textStd("Button Style"));
+	strcat(ach, "\n");
+	if (s_gpButtonStyle == GP_STYLE_AUTO) {
+		strcat(ach, "Auto (");
+		strcat(ach, shown);
+		strcat(ach, ")");
+	} else
+		strcat(ach, shown);
+	return ach;
+}
+
+static void ToggleGamepadButtonStyle(void *unused)
+{
+	s_gpButtonStyle = (s_gpButtonStyle + 1) % (GP_STYLE_NINTENDO + 1);
+}
 
 // Everything below the switch has no effect while it is off.
 static OptionDisplayType gamepadOptionShown(GameOptions *unused)
@@ -640,6 +665,11 @@ static GameOptions s_optListGamepad[] = {
 	  "held.",
 	  &s_gpCompact, kOptionType_Bool, &s_gpCompact, NULL, "OptionEnabled",
 	  "OptionDisabled", gamepadOptionShown },
+	{ 0, kOptionType_Func, DisplayGamepadButtonStyle,
+	  "Name the buttons as on an Xbox, PlayStation or Nintendo controller. "
+	  "Auto follows the one plugged in.",
+	  &s_gpButtonStyle, kOptionType_Func, ToggleGamepadButtonStyle,
+	  &s_gpButtonStyle, NULL, NULL, gamepadOptionShown },
 
 	{ 0, kOptionType_Title, "Targeting", 0, NULL, kOptionType_Nop, NULL,
 	  NULL, NULL, NULL },
@@ -696,6 +726,7 @@ static void gamepadOptionsRead(void)
 	s_gpCursorSpeed = (int)(gamepadGetSetting("cursor_speed") + 0.5f);
 	s_gpMoveDeadzone = gamepadGetSetting("move_deadzone");
 	s_gpLookDeadzone = gamepadGetSetting("look_deadzone");
+	s_gpButtonStyle = (int)(gamepadGetSetting("button_style") + 0.5f);
 }
 
 static void gamepadOptionApply(const char *name, F32 value)
@@ -723,6 +754,7 @@ static void gamepadOptionsWrite(void)
 	gamepadOptionApply("cursor_speed", (F32)s_gpCursorSpeed);
 	gamepadOptionApply("move_deadzone", s_gpMoveDeadzone);
 	gamepadOptionApply("look_deadzone", s_gpLookDeadzone);
+	gamepadOptionApply("button_style", (F32)s_gpButtonStyle);
 
 	// One camera speed drives both axes, keeping pitch in the same
 	// proportion to turning as before.

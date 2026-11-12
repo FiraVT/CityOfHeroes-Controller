@@ -19,6 +19,11 @@ void inpGamepadTypeCharacter(char c);
 #define COLOR_BUTTON_B 0xf07070ff
 #define COLOR_BUTTON_X 0x70a8ffff
 #define COLOR_BUTTON_Y 0xf0d860ff
+#define COLOR_CROSS 0x7fb3f5ff
+#define COLOR_CIRCLE 0xf2707aff
+#define COLOR_SQUARE 0xe591cfff
+#define COLOR_TRIANGLE 0x3fd6a8ff
+#define COLOR_NINTENDO 0xe0e0e0ff
 #define COLOR_FRIEND 0x60e080ff
 
 #define TRAYS_PER_SET 3
@@ -488,32 +493,97 @@ static int isFaceButton(int button)
 
 static const char *buttonLetter(int button)
 {
-	switch (button) {
-	case GP_A:
-		return "A";
-	case GP_B:
-		return "B";
-	case GP_X:
-		return "X";
-	case GP_Y:
-		return "Y";
-	}
-	return "";
+	return isFaceButton(button) ? gamepadButtonLabel(button) : "";
 }
 
 static int buttonColor(int button)
 {
+	static const int colors[][4] = {
+		[GP_STYLE_XBOX] = { COLOR_BUTTON_A, COLOR_BUTTON_B,
+				    COLOR_BUTTON_X, COLOR_BUTTON_Y },
+		[GP_STYLE_PLAYSTATION] = { COLOR_CROSS, COLOR_CIRCLE,
+					   COLOR_SQUARE, COLOR_TRIANGLE },
+		// A Switch pad's buttons are all one colour.
+		[GP_STYLE_NINTENDO] = { COLOR_NINTENDO, COLOR_NINTENDO,
+					COLOR_NINTENDO, COLOR_NINTENDO },
+	};
+
+	if (!isFaceButton(button))
+		return CLR_WHITE;
+	return colors[gamepadButtonStyle()][button - GP_A];
+}
+
+// A bar @length long and @thick wide centred on @x, @y, turned @angle radians.
+static void drawSymbolBar(F32 x, F32 y, F32 z, F32 length, F32 thick, F32 angle,
+			  int color)
+{
+	static AtlasTex *white;
+
+	if (!white)
+		white = atlasLoadTexture("white");
+	display_rotated_sprite(white, x - length / 2, y - thick / 2, z,
+			       length / white->width, thick / white->height,
+			       color, angle, 0);
+}
+
+// The outline of a regular polygon of @sides around @x, @y, with its first
+// corner @start radians round from the right.
+static void drawOutline(F32 x, F32 y, F32 z, F32 radius, int sides, F32 start,
+			F32 thick, int color)
+{
+	int i;
+
+	for (i = 0; i < sides; i++) {
+		F32 a = start + TWO_PI_F * i / sides;
+		F32 b = start + TWO_PI_F * (i + 1) / sides;
+		F32 ax = x + radius * cosf(a), ay = y + radius * sinf(a);
+		F32 bx = x + radius * cosf(b), by = y + radius * sinf(b);
+		F32 length =
+			sqrtf((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+
+		drawSymbolBar((ax + bx) / 2, (ay + by) / 2, z, length + thick,
+			      thick, atan2f(by - ay, bx - ax), color);
+	}
+}
+
+// A PlayStation face button's shape, @size across, centred on @x, @y.
+static void drawPlayStationSymbol(int button, F32 x, F32 y, F32 z, F32 size,
+				  int color)
+{
+	F32 thick = size * 0.14f > 1.5f ? size * 0.14f : 1.5f;
+	F32 radius = size / 2;
+
 	switch (button) {
 	case GP_A:
-		return COLOR_BUTTON_A;
+		drawSymbolBar(x, y, z, size * 1.1f, thick, TWO_PI_F / 8, color);
+		drawSymbolBar(x, y, z, size * 1.1f, thick, -TWO_PI_F / 8,
+			      color);
+		break;
 	case GP_B:
-		return COLOR_BUTTON_B;
+		drawOutline(x, y, z, radius, 16, 0, thick, color);
+		break;
 	case GP_X:
-		return COLOR_BUTTON_X;
+		drawOutline(x, y, z, radius * 1.1f, 4, TWO_PI_F / 8, thick,
+			    color);
+		break;
 	case GP_Y:
-		return COLOR_BUTTON_Y;
+		// Pointing up, with its middle a little low so it looks
+		// centred.
+		drawOutline(x, y + radius * 0.15f, z, radius * 1.15f, 3,
+			    -TWO_PI_F / 4, thick, color);
+		break;
 	}
-	return CLR_WHITE;
+}
+
+// A face button's mark: its letter, or its shape on a PlayStation pad.
+static void drawFaceMark(TTDrawContext *font, int button, F32 x, F32 y, F32 z,
+			 F32 textScale, F32 symbolSize, int color)
+{
+	if (gamepadButtonStyle() == GP_STYLE_PLAYSTATION)
+		drawPlayStationSymbol(button, x, y, z, symbolSize, color);
+	else
+		drawText(font, x, y, z, textScale, color, CENTER_X | CENTER_Y,
+			 buttonLetter(button));
 }
 
 void drawText(TTDrawContext *context, F32 x, F32 y, F32 z, F32 scale, int color,
@@ -621,9 +691,9 @@ static void drawButtonDisc(int button, const char *letter, F32 x, F32 y, F32 z,
 	scale = size / ring->width;
 	display_sprite(ring, x - size / 2, y - size / 2, z, scale, scale,
 		       color);
-	drawText(&game_12, x, y, z + 1, size / 26.0f, color,
-		 CENTER_X | CENTER_Y, letter);
-	(void)button;
+	drawFaceMark(&game_12, button, x, y, z + 1, size / 26.0f, size * 0.42f,
+		     color);
+	(void)letter;
 }
 
 static void drawCell(Entity *e, int modifiers, int button, F32 x, F32 y, F32 z,
@@ -663,10 +733,10 @@ static void drawCell(Entity *e, int modifiers, int button, F32 x, F32 y, F32 z,
 
 	if (object) {
 		if (isFaceButton(button))
-			drawText(&game_9, x + size / 2 - 5 * hudScale,
-				 y + size / 2 - 3 * hudScale, z + 8, hudScale,
-				 buttonColor(button), CENTER_X,
-				 buttonLetter(button));
+			drawFaceMark(
+				&game_9, button, x + size / 2 - 5 * hudScale,
+				y + size / 2 - 7 * hudScale, z + 8, hudScale,
+				8 * hudScale, buttonColor(button));
 	} else if (isFaceButton(button)) {
 		drawButtonDisc(button, buttonLetter(button), x, y, z + 2,
 			       size * 0.72f, buttonColor(button));
@@ -723,7 +793,7 @@ void drawCluster(Entity *e, int modifiers, const char *tag, F32 centerX,
 			 isHeld	 ? FRAME_COLOR_HELD
 			 : isDim ? 0xffffff60
 				 : CLR_WHITE,
-			 CENTER_X | CENTER_Y, tag);
+			 CENTER_X | CENTER_Y, gamepadLabelText(tag));
 }
 
 static void drawUnitFrame(Entity *e, F32 centerX, F32 y, F32 hudScale)
@@ -759,15 +829,20 @@ F32 drawPrompts(const Prompt *prompts, int count, F32 centerX, F32 y, F32 z,
 {
 	F32 discSize = 24 * hudScale;
 	F32 itemWidths[8];
+	const char *texts[8];
 	F32 total = 0;
 	F32 x;
 	int i;
 
-	for (i = 0; i < count; i++) {
+	// A hint without a button disc names its buttons in its text.
+	for (i = 0; i < count && i < ARRAY_SIZE(texts); i++) {
+		texts[i] = prompts[i].button >= 0
+				   ? prompts[i].text
+				   : gamepadLabelText(prompts[i].text);
 		itemWidths[i] =
 			(prompts[i].button >= 0 ? discSize + 4 * hudScale : 0) +
 			str_wd_notranslate(&game_12, hudScale, hudScale,
-					   prompts[i].text) +
+					   texts[i]) +
 			18 * hudScale;
 		total += itemWidths[i];
 	}
@@ -786,7 +861,7 @@ F32 drawPrompts(const Prompt *prompts, int count, F32 centerX, F32 y, F32 z,
 		}
 
 		drawText(&game_12, textX, y, z + 1, hudScale, CLR_WHITE,
-			 CENTER_Y, prompts[i].text);
+			 CENTER_Y, texts[i]);
 		x += itemWidths[i];
 	}
 	return total;
@@ -944,7 +1019,7 @@ static void drawMenu(F32 centerX, F32 centerY, int screenWidth,
 	// The pages, with the bumpers either side. A click on a page name turns
 	// to it.
 	drawText(&game_12, pageX - 80 * hudScale, pageY, MENU_Z + 4, hudScale,
-		 0xffffffc0, CENTER_X | CENTER_Y, "LB");
+		 0xffffffc0, CENTER_X | CENTER_Y, gamepadButtonLabel(GP_LB));
 	for (i = 0; i < MENU_PAGE_COUNT; i++) {
 		F32 x = pageX + i * 120 * hudScale;
 		CBox box;
@@ -968,7 +1043,7 @@ static void drawMenu(F32 centerX, F32 centerY, int screenWidth,
 	drawText(&game_12,
 		 pageX + (MENU_PAGE_COUNT - 1) * 120 * hudScale + 80 * hudScale,
 		 pageY, MENU_Z + 4, hudScale, 0xffffffc0, CENTER_X | CENTER_Y,
-		 "RB");
+		 gamepadButtonLabel(GP_RB));
 
 	drawPrompts(menuPrompts, ARRAY_SIZE(menuPrompts), centerX,
 		    pageY + 46 * hudScale, MENU_Z + 4, hudScale);
@@ -1134,13 +1209,16 @@ void gamepadKeyboardDraw(void)
 		    width * 0.5f - 110 * hudScale,
 		    top + step * KEYBOARD_ROWS + 14 * hudScale, KEYBOARD_Z + 2,
 		    hudScale);
-	drawTextRight(
-		&game_12, left + step * KEYBOARD_COLUMNS - KEY_GAP * hudScale,
-		top + step * KEYBOARD_ROWS + 14 * hudScale, KEYBOARD_Z + 2,
-		hudScale, CLR_WHITE,
-		keyboardPage == 2   ? "LT Letters  RT Letters  Start Enter"
-		: keyboardPage == 1 ? "LT Lower  RT Symbols  Start Enter"
-				    : "LT Upper  RT Symbols  Start Enter");
+	drawTextRight(&game_12,
+		      left + step * KEYBOARD_COLUMNS - KEY_GAP * hudScale,
+		      top + step * KEYBOARD_ROWS + 14 * hudScale,
+		      KEYBOARD_Z + 2, hudScale, CLR_WHITE,
+		      gamepadLabelText(
+			      keyboardPage == 2
+				      ? "LT Letters  RT Letters  Start Enter"
+			      : keyboardPage == 1
+				      ? "LT Lower  RT Symbols  Start Enter"
+				      : "LT Upper  RT Symbols  Start Enter"));
 
 	endPixelSpace(&saved);
 }
@@ -1362,12 +1440,13 @@ void consoleHudDraw(void)
 		place = hudPlace(HUD_PIECE_POWERS, centerX, bottomRow, hudScale,
 				 width, height);
 		if (!hudHidden(HUD_PIECE_POWERS))
-			drawCluster(e, held,
-				    held == GP_MOD_LT	? "LT"
-				    : held == GP_MOD_RT ? "RT"
-				    : held		? "LT + RT"
-							: NULL,
-				    place.x, place.y, place.scale, held);
+			drawCluster(
+				e, held,
+				held == GP_MOD_LT   ? gamepadButtonLabel(GP_LT)
+				: held == GP_MOD_RT ? gamepadButtonLabel(GP_RT)
+				: held		    ? "LT + RT"
+						    : NULL,
+				place.x, place.y, place.scale, held);
 	} else {
 		place = hudPlace(HUD_PIECE_POWERS, centerX, topRow, hudScale,
 				 width, height);
@@ -1377,13 +1456,13 @@ void consoleHudDraw(void)
 		place = hudPlace(HUD_PIECE_LT, centerX - 345 * hudScale,
 				 sideRow, hudScale, width, height);
 		if (!hudHidden(HUD_PIECE_LT))
-			drawCluster(e, GP_MOD_LT, "LT", place.x, place.y,
-				    place.scale, held);
+			drawCluster(e, GP_MOD_LT, gamepadButtonLabel(GP_LT),
+				    place.x, place.y, place.scale, held);
 		place = hudPlace(HUD_PIECE_RT, centerX + 345 * hudScale,
 				 sideRow, hudScale, width, height);
 		if (!hudHidden(HUD_PIECE_RT))
-			drawCluster(e, GP_MOD_RT, "RT", place.x, place.y,
-				    place.scale, held);
+			drawCluster(e, GP_MOD_RT, gamepadButtonLabel(GP_RT),
+				    place.x, place.y, place.scale, held);
 		place = hudPlace(HUD_PIECE_BOTH, centerX, bottomRow, hudScale,
 				 width, height);
 		if (!hudHidden(HUD_PIECE_BOTH)) {
@@ -1467,7 +1546,8 @@ void consoleHudDraw(void)
 				 height);
 		if (!hudHidden(HUD_PIECE_TARGETS))
 			drawTargetIndicator(
-				swapped ? "RB" : "LB",
+				swapped ? gamepadButtonLabel(GP_RB)
+					: gamepadButtonLabel(GP_LB),
 				place.x + (swapped ? 150 : -150) * place.scale,
 				place.y, place.scale, COLOR_FRIEND,
 				current_target && current_target->pchar &&
@@ -1476,7 +1556,8 @@ void consoleHudDraw(void)
 						current_target->pchar));
 		if (!hudHidden(HUD_PIECE_TARGETS))
 			drawTargetIndicator(
-				swapped ? "LB" : "RB",
+				swapped ? gamepadButtonLabel(GP_LB)
+					: gamepadButtonLabel(GP_RB),
 				place.x + (swapped ? -150 : 150) * place.scale,
 				place.y, place.scale, COLOR_ENEMY,
 				current_target && current_target->pchar &&

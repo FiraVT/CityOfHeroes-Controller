@@ -352,7 +352,7 @@ void drawNavScreen(int width, int height, F32 hudScale)
 	// The tabs, centred, with the bumpers either side of them.
 	tabX = left + panelWidth / 2 - (shown * tabStep - 8 * hudScale) / 2;
 	drawText(&game_12, tabX - 30 * hudScale, tabY, BIND_Z + 4, hudScale,
-		 0xffffffc0, CENTER_X | CENTER_Y, "LB");
+		 0xffffffc0, CENTER_X | CENTER_Y, gamepadButtonLabel(GP_LB));
 	for (i = 0; i < navTabCount; i++) {
 		int selected = i == navTab;
 		CBox box;
@@ -375,7 +375,7 @@ void drawNavScreen(int width, int height, F32 hudScale)
 		tabX += tabStep;
 	}
 	drawText(&game_12, tabX + 22 * hudScale, tabY, BIND_Z + 4, hudScale,
-		 0xffffffc0, CENTER_X | CENTER_Y, "RB");
+		 0xffffffc0, CENTER_X | CENTER_Y, gamepadButtonLabel(GP_RB));
 
 	// The League tab opens on the grid of every team; its list view showed
 	// one team of eight at a time.

@@ -896,21 +896,21 @@ void drawHudEdit(int screenWidth, F32 hudScale)
 
 		if (hudLayout[n].hidden)
 			snprintf(label, sizeof(label), "%s (hidden)",
-				 hudPieces[n].label);
+				 gamepadLabelText(hudPieces[n].label));
 		else if (n == HUD_PIECE_TEAM &&
 			 hudBoxes[n].height == hudPieces[n].box.height &&
 			 !(playerPtr()->teamup &&
 			   playerPtr()->teamup->members.count > 1))
 			snprintf(label, sizeof(label), "%s (shown on a team)",
-				 hudPieces[n].label);
+				 gamepadLabelText(hudPieces[n].label));
 		else if (hudLayout[n].size < 0.995f ||
 			 hudLayout[n].size > 1.005f)
 			snprintf(label, sizeof(label), "%s  %d%%",
-				 hudPieces[n].label,
+				 gamepadLabelText(hudPieces[n].label),
 				 (int)(hudLayout[n].size * 100 + 0.5f));
 		else
 			snprintf(label, sizeof(label), "%s",
-				 hudPieces[n].label);
+				 gamepadLabelText(hudPieces[n].label));
 
 		labelWidth = str_wd_notranslate(&game_12, hudScale, hudScale,
 						label) +

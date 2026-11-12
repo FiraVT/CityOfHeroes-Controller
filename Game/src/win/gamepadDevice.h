@@ -105,4 +105,17 @@ void gamepadDeviceRumble(U16 low, U16 high, U32 ms);
  */
 const char *gamepadDeviceName(void);
 
+/* Which maker's button names the open pad has printed on it. */
+typedef enum PadFamily {
+	PAD_FAMILY_XBOX, /* also any pad SDL3 does not recognise */
+	PAD_FAMILY_PLAYSTATION,
+	PAD_FAMILY_NINTENDO,
+} PadFamily;
+
+/*
+ * Family of the open pad, from the type SDL3 reports for it. PAD_FAMILY_XBOX
+ * when no pad is open.
+ */
+PadFamily gamepadDeviceFamily(void);
+
 #endif /* GAMEPAD_DEVICE_H */

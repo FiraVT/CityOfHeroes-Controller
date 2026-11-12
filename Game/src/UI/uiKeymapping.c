@@ -25,6 +25,8 @@
 #include "entity/entity.h"
 #include "UI/uiInput.h"
 #include <utilitieslib/language/MessageStoreUtil.h>
+#include <utilitieslib/language/MessageStore.h>
+#include "win/gamepad.h"
 
 //-----------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------
@@ -188,6 +190,23 @@ void ParseCommandList()
 //-----------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------
 
+// A key's name for the list. Pad buttons are named as printed on the pad in
+// use: "INP_JOY1" is "Pad A" on an Xbox pad and "INP_JOY1_PS", "Pad Cross", on
+// a PlayStation one.
+static const char *keymap_keyText(const char *name)
+{
+	char styled[64];
+
+	if (!strnicmp(name, "INP_JOY", 7) || !stricmp(name, "INP_LTRIGGER") ||
+	    !stricmp(name, "INP_RTRIGGER")) {
+		snprintf(styled, sizeof(styled), "%s%s", name,
+			 gamepadKeyTextSuffix());
+		if (msContainsKey(menuMessages, styled))
+			return textStd(styled);
+	}
+	return textStd(name);
+}
+
 //
 //
 static char* keymap_getName( int mod, int keyindex )
@@ -205,15 +224,19 @@ static char* keymap_getName( int mod, int keyindex )
             strcpy( keyname, textStd( "INP_SHIFT" ));
         if( mod == MODIFIER_ALT )
             strcpy( keyname, textStd( "INP_ALT" ));
-	if (keybind_padMask(mod))
+	if (keybind_padMask(mod)) {
 		keybind_modifierPrefix(mod, keyname, sizeof(keyname));
+		if (gamepadButtonStyle() != GP_STYLE_XBOX)
+			strcpy_s(keyname, sizeof(keyname),
+				 gamepadLabelText(keyname));
+	}
     }
 
     for( i = 0; i < sizeof(allowable_inputs)/sizeof(EntryType); i++ )
     {
         if( allowable_inputs[i].entry_code == keyindex )
         {
-            strcat( keyname, textStd(allowable_inputs[i].name) );
+            strcat( keyname, keymap_keyText(allowable_inputs[i].name) );
             break;
         }
     }

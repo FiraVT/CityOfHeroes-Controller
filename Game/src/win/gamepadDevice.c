@@ -132,3 +132,23 @@ const char *gamepadDeviceName(void)
 
 	return name ? name : "";
 }
+
+PadFamily gamepadDeviceFamily(void)
+{
+	if (!pad)
+		return PAD_FAMILY_XBOX;
+
+	switch (SDL_GetGamepadType(pad)) {
+	case SDL_GAMEPAD_TYPE_PS3:
+	case SDL_GAMEPAD_TYPE_PS4:
+	case SDL_GAMEPAD_TYPE_PS5:
+		return PAD_FAMILY_PLAYSTATION;
+	case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
+	case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+	case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+	case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+		return PAD_FAMILY_NINTENDO;
+	default:
+		return PAD_FAMILY_XBOX;
+	}
+}

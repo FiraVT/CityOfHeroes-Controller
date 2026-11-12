@@ -4,17 +4,6 @@
  */
 #include "UI/uiConsoleHudInternal.h"
 
-static const char *shortButtonName(int button)
-{
-	static const char *names[GP_BUTTON_COUNT] = {
-		"A",	 "B",	     "X",	   "Y",		 "Back",
-		"Start", "L3",	     "R3",	   "LB",	 "RB",
-		"Up",	 "Down",     "Left",	   "Right",	 "LT",
-		"RT",	 "Stick up", "Stick down", "Stick left", "Stick right",
-	};
-	return button >= 0 && button < GP_BUTTON_COUNT ? names[button] : "";
-}
-
 // The chord bound to "team_select_other n" in the keybinds, written as LB + A
 // and the like. Empty if none.
 static void teamSlotShortcut(int slot, char *out, size_t outSize)
@@ -38,7 +27,11 @@ static void teamSlotShortcut(int slot, char *out, size_t outSize)
 				   (modifiers & GP_MOD_RT) ? "RT + " : "",
 				   (modifiers & GP_MOD_LB) ? "LB + " : "",
 				   (modifiers & GP_MOD_RB) ? "RB + " : "",
-				   shortButtonName(button));
+				   gamepadButtonLabel(button));
+			// The modifiers are written as on an Xbox pad above,
+			// then named for the pad in use.
+			if (gamepadButtonStyle() != GP_STYLE_XBOX)
+				strcpy_s(out, outSize, gamepadLabelText(out));
 			return;
 		}
 	}

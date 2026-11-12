@@ -628,10 +628,12 @@ void drawBindScreen(Entity *e, int width, int height, F32 hudScale)
 			    hudScale * 0.8f, held);
 		drawCluster(e, GP_MOD_LT | GP_MOD_RT, "LT + RT", clusterRight,
 			    clusterTop, hudScale * 0.8f, held);
-		drawCluster(e, GP_MOD_LT, "LT", clusterLeft,
-			    clusterTop + 240 * hudScale, hudScale * 0.8f, held);
-		drawCluster(e, GP_MOD_RT, "RT", clusterRight,
-			    clusterTop + 240 * hudScale, hudScale * 0.8f, held);
+		drawCluster(e, GP_MOD_LT, gamepadButtonLabel(GP_LT),
+			    clusterLeft, clusterTop + 240 * hudScale,
+			    hudScale * 0.8f, held);
+		drawCluster(e, GP_MOD_RT, gamepadButtonLabel(GP_RT),
+			    clusterRight, clusterTop + 240 * hudScale,
+			    hudScale * 0.8f, held);
 		clusterBaseZ = HUD_Z;
 		bindScreenDrawing = 0;
 	}
