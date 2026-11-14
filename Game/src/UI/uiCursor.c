@@ -4,6 +4,7 @@
 //------------------------------------------------------------------------------------
 
 #include "win/input.h"
+#include "seq/seq.h"
 #include "UI/uiStoredSalvage.h"
 #include "player/player.h"
 #include "UI/uiUtil.h"
@@ -1018,13 +1019,36 @@ static void interactWithEntity(Entity *player, Entity *target)
 	}
 }
 
+// Whether the mouse could reach this thing: something drawn, selectable and
+// named. A mission's script can place helpers the player never sees, like the
+// control a teleport glowie hangs off, right beside a real objective.
+static bool canSeeToInteract(Entity *target)
+{
+	return target && !target->noDrawOnClient && !target->notSelectable &&
+	       !ENTHIDE(target) &&
+	       !(target->seq && getMoveFlags(target->seq, SEQMOVE_HIDE)) &&
+	       target->name[0] &&
+	       !(target->seq && target->seq->type &&
+		 strstri(target->seq->type->name, "invisible"));
+}
+
+// A friendly critter nobody owns, like a mission's bomb or a captive. Pets have
+// an owner and are left out, so a pet standing beside a contact cannot take the
+// interaction.
+static bool isObjectiveCritter(Entity *player, Entity *target)
+{
+	return critter_and_friend(target, player) && !erGetEnt(target->erOwner) &&
+	       !erGetEnt(target->erCreator);
+}
+
 static Entity *findNearestInteractable(Entity *player)
 {
 	Entity *best = NULL;
 	F32 bestDistance = SQR(INTERACT_DISTANCE);
 	int i;
 
-	if (canInteractWithEntity(player, current_target))
+	if (canInteractWithEntity(player, current_target) &&
+	    canSeeToInteract(current_target))
 		return current_target;
 
 	for (i = 1; i < entities_max; i++) {
@@ -1036,8 +1060,10 @@ static Entity *findNearestInteractable(Entity *player)
 
 		candidate = entities[i];
 
-		if (ENTTYPE(candidate) == ENTTYPE_CRITTER ||
-		    !canInteractWithEntity(player, candidate))
+		if ((ENTTYPE(candidate) == ENTTYPE_CRITTER &&
+		     !isObjectiveCritter(player, candidate)) ||
+		    !canInteractWithEntity(player, candidate) ||
+		    !canSeeToInteract(candidate))
 			continue;
 
 		distance = distance3Squared(ENTPOS(player), ENTPOS(candidate));
@@ -1183,10 +1209,45 @@ const char *interactPromptVerb(void)
 	return "Talk";
 }
 
+void interactDebugList(void)
+{
+	Entity *player = playerPtr();
+	char line[256];
+	int i;
+
+	if (!player)
+		return;
+	for (i = 1; i < entities_max; i++) {
+		Entity *ent;
+		F32 dist;
+
+		if (!(entity_state[i] & ENTITY_IN_USE))
+			continue;
+		ent = entities[i];
+		if (ent == player || ENTTYPE(ent) == ENTTYPE_PLAYER)
+			continue;
+		dist = sqrtf(distance3Squared(ENTPOS(player), ENTPOS(ent)));
+		if (dist > INTERACT_DISTANCE * 2)
+			continue;
+		snprintf(line, sizeof(line),
+			 "id %d svr %d type %d '%s' dist %.1f nodraw %d nosel %d "
+			 "hide %d seq %s reach %d see %d",
+			 i, ent->svr_idx, ENTTYPE(ent), ent->name, dist,
+			 ent->noDrawOnClient, ent->notSelectable,
+			 (int)ENTHIDE(ent),
+			 ent->seq && ent->seq->type ? ent->seq->type->name : "-",
+			 canInteractWithEntity(player, ent),
+			 canSeeToInteract(ent));
+		addSystemChatMsg(line, INFO_SVR_COM, 0);
+	}
+}
+
 // Does what clicking would do for the nearest thing in reach, without needing
-// the cursor over it. The current target wins when it is in reach. Friendly
-// critters count only as a target, so that pets standing beside a contact
-// cannot take the interaction.
+// the cursor over it. The current target wins when it is in reach. Only things
+// the mouse could click count, so an invisible helper a mission places beside
+// an objective cannot take the interaction. Friendly critters count when nobody
+// owns them, like a bomb to arm or a captive, so a pet standing beside a
+// contact cannot.
 void interactWithNearest(void)
 {
 	static const F32 screenHeights[] = { 0.5f, 0.65f, 0.8f };

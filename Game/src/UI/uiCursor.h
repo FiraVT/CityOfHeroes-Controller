@@ -62,6 +62,12 @@ void setCursor( char *base, char *overlay, int software, int hotX, int hotY );
 void destroyCursorHashTable();
 void interactWithInterestingGroupDef( Entity * player, GroupDef * def, Vec3 collisionPos, DefTracker * tracker );
 void interactWithNearest(void);
+/*
+ * /interact_debug: one system chat line for each non-player entity within
+ * twice interact range, with the fields that decide whether the interact
+ * button can use it. Does nothing without a player.
+ */
+void interactDebugList(void);
 const char *interactPromptVerb(void);
 
 #endif

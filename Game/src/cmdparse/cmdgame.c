@@ -324,6 +324,7 @@ enum
     CMD_TARGET_CUSTOM_PREV,
 
     CMD_INTERACT,
+    CMD_INTERACT_DEBUG,
     CMD_GAMEPAD_CURSOR,
     CMD_GAMEPAD_RELOAD,
     CMD_GAMEPAD_SAVE,
@@ -892,6 +893,8 @@ Cmd game_cmds[] =
                         "Saves all keybinds to specified file." },
     { 0, "interact", CMD_INTERACT, {{ 0 }}, 0,
                         "Talks to, enters or uses the current target or the nearest thing in reach." },
+    { 0, "interact_debug", CMD_INTERACT_DEBUG, {{ 0 }}, 0,
+                        "Lists what the interact button can see nearby." },
     { 0, "gamepad_cursor", CMD_GAMEPAD_CURSOR, {{ 0 }}, 0,
                         "Toggles between steering the camera and moving the mouse cursor with the right stick." },
     { 0, "gamepad_reload", CMD_GAMEPAD_RELOAD, {{ 0 }}, 0,
@@ -3884,6 +3887,8 @@ int cmdGameParse(char *str, int x, int y)
         }
         xcase CMD_INTERACT:
             interactWithNearest();
+        xcase CMD_INTERACT_DEBUG:
+            interactDebugList();
         xcase CMD_GAMEPAD_CURSOR:
             gamepadToggleCursorMode();
         xcase CMD_GAMEPAD_RELOAD:
