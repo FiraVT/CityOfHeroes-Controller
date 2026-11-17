@@ -1192,7 +1192,7 @@ static void pressButton(int button)
 		return;
 	}
 
-	if (consoleBindIsOpen()) {
+	if (consoleBindIsOpen() && !(modifiers && consoleBindKeepsSticks())) {
 		trace("%s: binding screen", chord);
 		consoleBindPress(modifiers, button);
 		dpadRepeatAt = lastPadUse + DPAD_REPEAT_DELAY_MS;
@@ -1317,6 +1317,15 @@ static void pressButton(int button)
 		    window_getMode(WDW_STORE) == WINDOW_DISPLAYING) {
 			trace("%s: quick sell or buy", chord);
 			quickTrade = 1;
+			return;
+		}
+
+		// In the inspiration tray, Y combines three of the highlighted
+		// one.
+		if (button == GP_Y && inGame() &&
+		    window_getMode(WDW_INSPIRATION) == WINDOW_DISPLAYING &&
+		    consoleInspirationsCombine()) {
+			trace("%s: combine inspirations", chord);
 			return;
 		}
 
@@ -1746,7 +1755,8 @@ void gamepadUpdate(void)
 
 	{
 		int stickMenuOpen =
-			consoleMenuIsOpen() || consoleBindIsOpen() ||
+			consoleMenuIsOpen() ||
+			(consoleBindIsOpen() && !consoleBindKeepsSticks()) ||
 			gamepadKeyboardIsOpen() || consoleNavIsOpen();
 
 		if (stickMenuWasOpen && !stickMenuOpen)
@@ -1894,7 +1904,7 @@ void gamepadUpdate(void)
 
 	// The binding screen is a menu too, so the character stands still and a
 	// stick push steps the list.
-	if (consoleBindIsOpen()) {
+	if (consoleBindIsOpen() && !consoleBindKeepsSticks()) {
 		moveActive = 0;
 		moveSpeed = 0;
 		lookYaw = 0;

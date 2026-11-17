@@ -911,6 +911,15 @@ static int gatherPrompts(Prompt *prompts)
 			return ARRAY_SIZE(store);
 		}
 
+		if (consoleInspirationsCanCombine()) {
+			Prompt inspirations[] = { { GP_A, "Use" },
+						  { GP_Y, "Combine 3" },
+						  { GP_X, "Options" },
+						  { GP_B, "Back" } };
+			memcpy(prompts, inspirations, sizeof(inspirations));
+			return ARRAY_SIZE(inspirations);
+		}
+
 		memcpy(prompts, cursorMode, sizeof(cursorMode));
 		return gamepadOpenWindowCount() > 1
 			       ? ARRAY_SIZE(cursorMode)
@@ -1396,10 +1405,10 @@ void consoleHudDraw(void)
 		return;
 	}
 
-	if (inspScreenUp()) {
-		drawInspScreen(e, width, height, hudScale);
-		return;
-	}
+	// Combining from the game's tray: the list beside it, with the HUD left
+	// as it is.
+	if (inspScreenUp())
+		drawInspCombine(e, width, height, hudScale);
 
 	centerX = width * 0.5f;
 	topRow = height - 240 * hudScale;

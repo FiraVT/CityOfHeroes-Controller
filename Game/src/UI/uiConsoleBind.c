@@ -28,6 +28,14 @@ int consoleBindIsOpen(void)
 	       inspScreenUp() || tradeScreenUp();
 }
 
+// The combine list beside the inspiration tray leaves the sticks and the LT or
+// RT chords to the game.
+int consoleBindKeepsSticks(void)
+{
+	return inspScreenUp() && !tradeScreenUp() && !hudEditUp() &&
+	       !gameMenuUp();
+}
+
 void consoleBindToggle(void)
 {
 	char standardPowers[] = "window_toggle powerlist";

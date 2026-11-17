@@ -563,7 +563,7 @@ void gameMenuPress(int button);
 void drawGameMenu(int width, int height, F32 hudScale);
 int inspScreenUp(void);
 void inspPress(int modifiers, int button);
-void drawInspScreen(Entity *e, int width, int height, F32 hudScale);
+void drawInspCombine(Entity *e, int width, int height, F32 hudScale);
 extern int tradeTab;
 extern int tradeSelection;
 extern int tradeTopRow;

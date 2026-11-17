@@ -47,6 +47,8 @@
 #include "UI/uiAuction.h"
 #include <utilitieslib/components/EString.h>
 #include "auction/AuctionData.h"
+#include "UI/uiConsoleHud.h"
+#include "win/gamepad.h"
 //-----------------------------------------------------------------------------------------
 
 enum
@@ -73,6 +75,16 @@ enum
 
 #define ICON_WD                32        // Size of inspiration icon
 #define SPACER                4        // space between icons
+
+// The slot under the pointer this frame, which is where the pad's highlight
+// sits in console mode.
+static int s_hoverCol = -1, s_hoverRow = -1;
+static int s_focusFirstSlot;
+
+void inspirationFocusFirstSlot(void)
+{
+	s_focusFirstSlot = 1;
+}
 
 static int trayState = INSP_TRAY_CLOSED;
 
@@ -779,6 +791,21 @@ static void drawInspirationSlots( Entity *e, int col, int row, float x, float y,
     // get the slot collision box
        BuildCBox( &box, x+(col*(ICON_WD+SPACER)-SPACER/2)*scale, y+ht-((row+1)*ICON_WD)*scale, (ICON_WD+SPACER)*scale, ICON_WD*scale );
 
+    // In console mode every slot that shows is a place for the D-pad, filled
+    // or not, so using one does not leave the focus on nothing. The first
+    // slot takes the focus when the tray opens.
+    if (consoleHudActive() &&
+        (ht - (row + 1) * (ICON_WD + ((row > 0) * SPACER)) * scale) >= 0 &&
+        window_getMode(WDW_INSPIRATION) == WINDOW_DISPLAYING) {
+    	if (ts->type != kTrayItemType_Inspiration)
+    		mouseCollision(&box);
+    	if (s_focusFirstSlot && col == 0 && row == 0) {
+    		s_focusFirstSlot = 0;
+    		gamepadFocusPoint((int)((box.lx + box.hx) / 2),
+    				  (int)((box.ly + box.hy) / 2));
+    	}
+    }
+
      // if this slot has an inspiration in it and is visible
        if( ts->type == kTrayItemType_Inspiration && (ht - (row+1)*(ICON_WD+((row>0)*SPACER))*scale) >= 0 )
      {
@@ -789,6 +816,8 @@ static void drawInspirationSlots( Entity *e, int col, int row, float x, float y,
            if( mouseCollision( &box ) && ts->state == ICON_NONE && window_getMode(WDW_INSPIRATION) == WINDOW_DISPLAYING )
         {
             ts->scale = 1.1f; // embiggen it
+            s_hoverCol = col;
+            s_hoverRow = row;
 
             // drag timer is on a small delay
                if( isDown( MS_LEFT ) && !cursor.dragging  )
@@ -959,6 +988,17 @@ static void drawInspirationSlots( Entity *e, int col, int row, float x, float y,
 #define INSP_TRAY_SPEED 15
 
 static float s_insp_flash;
+
+int inspirationHoveredSlot(int *col, int *row)
+{
+	if (s_hoverCol < 0 ||
+	    window_getMode(WDW_INSPIRATION) != WINDOW_DISPLAYING)
+		return 0;
+	*col = s_hoverCol;
+	*row = s_hoverRow;
+	return 1;
+}
+
 void inspirationWindowFlash(void)
 {
     s_insp_flash = .0001f;
@@ -1007,6 +1047,7 @@ int inspirationWindow()
     }
 
     updateInspirationTray( e, cols, rows );
+    s_hoverCol = s_hoverRow = -1;
 
       set_scissor( TRUE );
      scissor_dims( x + PIX3*scale, y + PIX3*scale, wd - PIX3*2*scale, ht - PIX3*2*scale );
@@ -1025,7 +1066,9 @@ int inspirationWindow()
 
     if( trayState != INSP_TRAY_LOCKED )
     {
-        if( okToInput(0) && inpLevel( INP_SHIFT ))
+        // The pad has no Shift to hold, so in console mode every row stays
+        // out where the D-pad can reach it.
+        if( (okToInput(0) && inpLevel( INP_SHIFT )) || consoleHudActive() )
             trayState = INSP_TRAY_OPEN;
         else
             trayState = INSP_TRAY_CLOSED;

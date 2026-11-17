@@ -32,6 +32,9 @@ void consoleMenuPage(int button);
 // A screen listing the character's powers, where one is picked and then bound
 // by pressing a button.
 int consoleBindIsOpen(void);
+// True when the open screen is the inspiration combine list, which leaves both
+// sticks and the trigger chords to the game.
+int consoleBindKeepsSticks(void);
 // Opens it when the console HUD is on, or the standard powers window otherwise.
 void consoleBindToggle(void);
 void consoleBindPress(int modifiers, int button);
@@ -109,9 +112,15 @@ int consoleHudEditIsOpen(void);
 void consoleGameMenuToggle(void);
 int consoleGameMenuIsOpen(void);
 
-// The inspiration tray as a console screen: use them, and combine three of the
-// same into another.
+// Opens the game's inspiration tray with the D-pad on its first slot, or
+// toggles the tray when the console HUD is off.
 void consoleInspirationsToggle(void);
+// Y in that tray: opens the list of what three of the highlighted inspiration
+// can become, or says why it cannot. Returns 1 when Y was used, 0 when the
+// tray has no highlighted slot.
+int consoleInspirationsCombine(void);
+// True when the highlighted inspiration in the tray has three to combine.
+int consoleInspirationsCanCombine(void);
 
 // Moves the selection through the team and league members shown on the HUD:
 // "up", "down", "left" or "right".
