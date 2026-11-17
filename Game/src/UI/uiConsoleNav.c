@@ -9,13 +9,19 @@ int consoleNavIsOpen(void)
 	return navOpen && consoleHudActive();
 }
 
-// A window a tab opens of its own, like the Contact Finder from Find Contact.
-// It is drawn under the screen.
-int navSideWindowUp(void)
+int navFinderUp(void)
 {
 	int mode = window_getMode(WDW_CONTACT_FINDER);
 
 	return mode == WINDOW_DISPLAYING || mode == WINDOW_GROWING;
+}
+
+int navSideWindowUp(void)
+{
+	int talk = window_getMode(WDW_CONTACT_DIALOG);
+
+	return navFinderUp() || talk == WINDOW_DISPLAYING ||
+	       talk == WINDOW_GROWING;
 }
 
 // A popup, or a window a tab opened, is under this screen, so while one is up

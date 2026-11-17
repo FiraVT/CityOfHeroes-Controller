@@ -1362,7 +1362,7 @@ void consoleHudDraw(void)
 		static int sideWindowWasUp;
 		int sideWindowUp = navSideWindowUp();
 
-		if (sideWindowUp && !sideWindowWasUp)
+		if (sideWindowUp && !sideWindowWasUp && navFinderUp())
 			gamepadFocusOnWindow(WDW_CONTACT_FINDER);
 		else if (!sideWindowUp && sideWindowWasUp)
 			navFocusFrames = 2;

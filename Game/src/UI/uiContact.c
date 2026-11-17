@@ -35,6 +35,7 @@
 #include "UI/uiGame.h"
 #include "UI/uiNet.h"
 #include "UI/uiOptions.h"
+#include "UI/uiConsoleHud.h"
 
 #include "formatter/smf_main.h"
 
@@ -1245,6 +1246,7 @@ int contactLoadLimiter = 2;
 //
 static void displayContact( int idx, int xorig, float *y, int z, int wdorig, float sc, int color, int draw)
 {
+    float callLeft = 0;
 #define FADE_WIDTH  (150.0f)
 #define FADE_HEIGHT (38.0f)
 #define CALL_HEIGHT (20.0f)
@@ -1359,6 +1361,7 @@ static void displayContact( int idx, int xorig, float *y, int z, int wdorig, flo
     {
         char *defaultCall = cs->tipType?"TipCallString":"CallString";
         char *callstring = cs->callOverride?cs->callOverride:defaultCall;
+        callLeft = x + wd - CALL_WIDTH*sc*1.5 + 9*sc - CALL_WIDTH*sc;
         if(D_MOUSEHIT == drawStdButton(x + wd - CALL_WIDTH*sc*1.5 + 9*sc , *y + 46.5*sc + CALL_HEIGHT/2*sc, z,
             CALL_WIDTH*sc*2, CALL_HEIGHT*sc, color, callstring, .75f*sc, 0))
         {
@@ -1453,6 +1456,17 @@ static void displayContact( int idx, int xorig, float *y, int z, int wdorig, flo
     ht = max(ht+(FADE_HEIGHT+CONTACT_SPACE)*sc, max((ICON_HEIGHT+PIX3*2+4+4)*sc, (CONTACT_HT-5)*sc));
     //ht = (ICON_HEIGHT+PIX3*2+4+4)*sc;
     BuildCBox( &box, xorig, *y, wdorig, ht);
+
+    // The Call button sits inside the row, which makes the row a panel to the
+    // D-pad rather than a place to land. In console mode the row left of the
+    // button is offered on its own, so the contact can be picked.
+    if (callLeft > xorig + 8 * sc && consoleHudActive()) {
+    	CBox rowBox;
+
+    	BuildCBox(&rowBox, xorig, *y, callLeft - 6 * sc - xorig, ht);
+    	mouseCollision(&rowBox);
+    }
+
     if( mouseCollision( &box ))
     {
         foreColor = CLR_MOUSEOVER_FOREGROUND;

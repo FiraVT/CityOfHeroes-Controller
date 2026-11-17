@@ -594,6 +594,11 @@ extern U8 navReopen[NAV_TAB_MAX];
 extern int navFocusFrames;
 extern F32 navMapScale;
 extern F32 navContentWidth, navContentHeight;
+// True while the Contact Finder, opened from Find Contact, is up.
+int navFinderUp(void);
+// True while a window a tab opened of its own is up: the Contact Finder, or
+// the conversation a contact's Call button starts. It is drawn under the
+// screen.
 int navSideWindowUp(void);
 int navCovers(void);
 void navClose(void);
