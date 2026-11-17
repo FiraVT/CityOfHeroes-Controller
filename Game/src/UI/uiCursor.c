@@ -1029,7 +1029,7 @@ static bool canSeeToInteract(Entity *target)
 	       !(target->seq && getMoveFlags(target->seq, SEQMOVE_HIDE)) &&
 	       target->name[0] &&
 	       !(target->seq && target->seq->type &&
-		 strstri(target->seq->type->name, "invisible"));
+		 strstriConst(target->seq->type->name, "invisible"));
 }
 
 // A friendly critter nobody owns, like a mission's bomb or a captive. Pets have
