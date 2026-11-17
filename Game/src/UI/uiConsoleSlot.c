@@ -118,6 +118,46 @@ static void stepSlotRow(Entity *e, int direction)
 	}
 }
 
+// Past the end of a power's slots, left and right cross to the power level with
+// it in the other column, or the nearest one there that can take the
+// enhancement.
+static void crossSlotColumn(Entity *e, int direction)
+{
+	int place = slotRow - slotTopRow;
+	int first, last, target, distance;
+
+	if (place < 0 || (direction > 0) == (place >= SLOT_ROWS_PER_COLUMN))
+		return;
+
+	first = slotTopRow + (direction > 0 ? SLOT_ROWS_PER_COLUMN : 0);
+	last = MIN(first + SLOT_ROWS_PER_COLUMN - 1, slotRowCount - 1);
+	target = MIN(slotRow + direction * SLOT_ROWS_PER_COLUMN, last);
+
+	for (distance = 0; first <= last && distance < SLOT_ROWS_PER_COLUMN;
+	     distance++) {
+		int tries[2];
+		int i;
+
+		tries[0] = target - distance;
+		tries[1] = target + distance;
+		for (i = 0; i < 2; i++) {
+			int row = tries[i];
+			int column;
+
+			if (row < first || row > last)
+				continue;
+			column = nearestFit(e, row,
+					    direction > 0 ? 0
+							  : slotRows[row].slots - 1);
+			if (column >= 0) {
+				slotRow = row;
+				slotColumn = column;
+				return;
+			}
+		}
+	}
+}
+
 static void stepSlotColumn(Entity *e, int direction)
 {
 	int column;
@@ -130,6 +170,7 @@ static void stepSlotColumn(Entity *e, int direction)
 			return;
 		}
 	}
+	crossSlotColumn(e, direction);
 }
 
 static void startChoosingSlot(Entity *e)
