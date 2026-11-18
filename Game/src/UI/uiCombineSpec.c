@@ -2902,6 +2902,74 @@ ADDBOOSTLINE(JumpHeight) //enhanced by jump
 ADDBOOSTLINE(Recovery) //goes with endurance
 */
 
+// The name the power allows an attribute under, as the tooltip picks it, or
+// NULL when the power takes no enhancement for it.
+static const char *allowedBoostName(const Power *ppow,
+				    const BoostDescLine *line)
+{
+	int origins = eaSize(&g_CharacterOrigins.ppOrigins);
+	int i;
+
+	for (i = 0; i < eaiSize(&ppow->ppowBase->pBoostsAllowed); i++) {
+		int allowed = ppow->ppowBase->pBoostsAllowed[i];
+		const char *name;
+
+		if (allowed < origins)
+			continue;
+		name = g_AttribNames.ppBoost[allowed - origins]->pchName;
+		if (stricmp(name, line->boostAllowedName1) == 0)
+			return line->boostDisplayName1;
+		if (line->boostAllowedName2[0] &&
+		    stricmp(name, line->boostAllowedName2) == 0)
+			return line->boostDisplayName2;
+	}
+	return NULL;
+}
+
+int spec_PowerTotals(const Power *ppow, const Boost *newboost, int idx,
+		     SpecTotal *out, int max)
+{
+	CharacterAttributes kept, raw;
+	Boost temp;
+	Boost *replace = NULL;
+	int diminishing = game_state.enableBoostDiminishing;
+	int i, count = 0;
+
+	if (!ppow || !ppow->ppowBase)
+		return 0;
+
+	if (newboost) {
+		temp = *newboost;
+		temp.idx = idx;
+		replace = &temp;
+	}
+
+	// The same numbers getEffectiveString shows, and again without
+	// diminishing returns to tell what they cost.
+	ClientCalcBoosts(ppow, &kept, replace);
+	game_state.enableBoostDiminishing = 0;
+	ClientCalcBoosts(ppow, &raw, replace);
+	game_state.enableBoostDiminishing = diminishing;
+
+	for (i = 0; i < BOOSTTYPES && count < max; i++) {
+		float value = *(float *)((char *)&kept + boostLines[i].offset);
+		float full = *(float *)((char *)&raw + boostLines[i].offset);
+		const char *name;
+
+		if (fabsf(value) < 0.0005f && fabsf(full) < 0.0005f)
+			continue;
+		name = allowedBoostName(ppow, &boostLines[i]);
+		if (!name)
+			continue;
+
+		out[count].name = name;
+		out[count].value = value;
+		out[count].lost = full > value ? full - value : 0;
+		count++;
+	}
+	return count;
+}
+
 char *getBoostName(char *name)
 {
     static char result[64];

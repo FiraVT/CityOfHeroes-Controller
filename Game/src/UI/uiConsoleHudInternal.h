@@ -136,6 +136,10 @@ typedef struct BindPower {
 
 #define SLOT_POG_STEP 74.0f
 
+// Inventory rows shown at once; the rest scroll with the selection, so the
+// information under them stays on the panel.
+#define SLOT_INV_ROWS 4
+
 #define SLOT_ROW_STEP 62.0f
 
 #define SLOT_ROW_POG_STEP 54.0f
@@ -434,6 +438,14 @@ extern SlotRow slotRows[SLOT_MAX_ROWS];
 extern int slotMouseX, slotMouseY;
 int slotScreenUp(void);
 void slotPress(int modifiers, int button);
+/*
+ * slotLook - the right stick on the Enhancements screen
+ * @y: stick position, down positive
+ * @seconds: time since the last frame
+ *
+ * Scrolls a power's numbers. Returns nonzero when the screen took the stick.
+ */
+int slotLook(F32 y, F32 seconds);
 void drawSlotScreen(Entity *e, int width, int height, F32 hudScale);
 extern const char *const incTabNames[INC_TAB_COUNT];
 extern const char *const incRarityNames[INC_RARITY_ROWS];

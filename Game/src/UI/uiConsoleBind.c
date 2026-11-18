@@ -66,6 +66,9 @@ int consoleBindLook(F32 y, F32 seconds)
 	if (hudEditUp())
 		return hudEditLook(y, seconds);
 
+	if (slotScreenUp())
+		return slotLook(y, seconds);
+
 	if (!bindOpen || !bindInfoOpen || slotScreenUp() || incScreenUp() ||
 	    invScreenUp())
 		return 0;

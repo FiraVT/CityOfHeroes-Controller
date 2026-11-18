@@ -2410,6 +2410,88 @@ void displayPowerInfo(F32 x, F32 y, F32 z, F32 wd, F32 ht, const BasePower *pPow
     }
 }
 
+// A key for what the console numbers were built from, so they are rebuilt only
+// when the power, its enhancements, the one being tried or the level change.
+static size_t consoleInfoKey(const Power *pPow, const Boost *replace, int level)
+{
+	size_t key = 0;
+	int i;
+
+	for (i = 0; i < eaSize(&pPow->ppBoosts); i++) {
+		const Boost *b = pPow->ppBoosts[i];
+
+		key = key * 31 + (b ? (size_t)b->ppowBase * 7 + b->iLevel * 3 +
+					      b->iNumCombines
+				    : 1);
+	}
+	if (replace)
+		key = key * 31 + (size_t)replace->ppowBase * 5 +
+		      replace->iLevel * 3 + replace->iNumCombines +
+		      replace->idx * 101;
+	return key * 31 + level;
+}
+
+F32 powerInfoConsoleDraw(const Power *pPow, const Boost *replace, F32 x, F32 y,
+			 F32 z, F32 wd, F32 ht, F32 scale, F32 scroll)
+{
+	static SMFBlock *pBlock;
+	static char *s_text;
+	static const Power *s_lastPow;
+	static size_t s_lastKey;
+	static F32 s_lastWd;
+	Entity *e = playerPtr();
+	int reformat = 0;
+	size_t key;
+	UIBox box;
+	F32 text_ht;
+
+	if (!pPow || !pPow->ppowBase || !e || !e->pchar || !e->pchar->pclass)
+		return 0;
+
+	if (!pBlock)
+		pBlock = smfBlock_Create();
+
+	key = consoleInfoKey(pPow, replace, e->pchar->iCombatLevel);
+	if (!s_text || s_lastPow != pPow || s_lastKey != key ||
+	    s_lastWd != wd) {
+		const CharacterClass *pClass = e->pchar->pclass;
+		int level = e->pchar->iCombatLevel;
+		CharacterAttributes attr;
+		Boost temp;
+		char *str;
+
+		if (replace)
+			temp = *replace;
+		ClientCalcBoosts(pPow, &attr, replace ? &temp : NULL);
+
+		estrCreate(&str);
+		power_AddBaseStats(pPow->ppowBase, &attr, pClass, NULL, level,
+				   &str, POWERINFO_BOTH, 0, 0);
+		estrConcatStaticCharArray(&str, "<br>");
+		power_AddEffects(pPow->ppowBase, &attr, pClass, NULL, level,
+				 &str, POWERINFO_BOTH, 0, 0, 0);
+		power_AddPets(&str, pPow->ppowBase, &attr, pClass, level,
+			      POWERINFO_BOTH, 0, 0);
+
+		SAFE_FREE(s_text);
+		s_text = strdup(str);
+		estrDestroy(&str);
+		s_lastPow = pPow;
+		s_lastKey = key;
+		s_lastWd = wd;
+		reformat = 1;
+	}
+
+	uiBoxDefine(&box, x, y, wd, ht);
+	clipperPush(&box);
+	s_taPowerInfo.piScale = (int *)(intptr_t)(int)(scale * SMF_FONT_SCALE);
+	text_ht = smf_ParseAndDisplay(pBlock, s_text, (int)x, (int)(y - scroll),
+				      (int)z, (int)wd, 0, reformat, reformat,
+				      &s_taPowerInfo, NULL, 0, true);
+	clipperPop();
+	return text_ht;
+}
+
 void menuDisplayPowerInfo( F32 x, F32 y, F32 z, F32 wd, F32 ht, const BasePower *pBasePow, const Power * pPow, int ShowEnhance )        
 {
      clipperPush(NULL);

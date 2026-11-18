@@ -74,5 +74,28 @@ void spec_PlaceFromInventoryNow(int iset, int ipow, int ispec, int idx, float x,
 				float y, float z);
 char *getEffectiveString(Power *ppow, Boost *oldboost, Boost *newboost, int idx);
 
+/*
+ * One enhanced attribute of a power, for the console Enhancements screen.
+ * name is a message key for textStd. value is the bonus after diminishing
+ * returns (0.5 is +50%), and lost is what diminishing returns took off it.
+ */
+typedef struct SpecTotal {
+	const char *name;
+	float value;
+	float lost;
+} SpecTotal;
+
+/*
+ * spec_PowerTotals - the enhanced attributes of a power
+ * @ppow: the power
+ * @newboost: an enhancement to count in as if slotted at @idx, or NULL
+ * @idx: the slot @newboost would go in
+ * @out: filled with up to @max attributes, as getEffectiveString names them
+ * @max: room in @out
+ *
+ * Returns the number of attributes written to @out.
+ */
+int spec_PowerTotals(const Power *ppow, const Boost *newboost, int idx,
+		     SpecTotal *out, int max);
 
 #endif
